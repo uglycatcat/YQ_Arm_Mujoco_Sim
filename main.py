@@ -271,8 +271,9 @@ class RobotArmController:
                 if res is not None and res.success:
                     for i, joint_idx in enumerate(self.control_list):
                         self.data.qpos[joint_idx] = res.x[i]
-                    # 更新关节角度到串口协议
-                    protocol.update_angles([self.data.qpos[i] for i in self.control_list])
+                    # 更新关节角度到串口协议（如果串口可用）
+                    if protocol.serial_enabled:
+                        protocol.update_angles([self.data.qpos[i] for i in self.control_list])
                     mj.mj_step(self.model, self.data)
                 else:
                     print("IK求解失败")

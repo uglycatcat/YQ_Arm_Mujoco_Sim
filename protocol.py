@@ -54,16 +54,25 @@ class JointAngleProtocol:
 
     def __init__(self, port="COM5", baudrate=115200):
         """初始化串口通信协议"""
-        self.serial = serial.Serial(port, baudrate)
+        self.serial = None
         self.running = Event()
-        self.joint_angles = np.zeros(6, dtype=np.float32)  # 指定数据类型为float32
+        self.joint_angles = np.zeros(6, dtype=np.float32)
         self.thread = None
         self.lock = Lock()
         self.seq = 0
         # 预分配缓冲区
-        self.angles_buffer = bytearray(12)  # 6个uint16
-        self.header_buffer = bytearray(8)   # 固定头部长度
-        self.packet_buffer = bytearray(22)  # 总包长度
+        self.angles_buffer = bytearray(12)
+        self.header_buffer = bytearray(8)
+        self.packet_buffer = bytearray(22)
+        
+        # 尝试打开串口
+        try:
+            self.serial = serial.Serial(port, baudrate)
+            self.serial_enabled = True
+            print(f"成功连接到串口 {port}")
+        except serial.SerialException as e:
+            self.serial_enabled = False
+            print(f"警告：无法连接到串口 {port}，将禁用串口功能")
 
     def calculate_crc16(self, data):
         """优化的CRC16计算"""
@@ -85,7 +94,7 @@ class JointAngleProtocol:
         self.running.clear()
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=1.0)
-        if self.serial.is_open:
+        if self.serial and self.serial.is_open:
             self.serial.close()
 
     def update_angles(self, angles):
@@ -118,6 +127,9 @@ class JointAngleProtocol:
 
     def _send_packet(self):
         """优化的数据包发送"""
+        if not self.serial_enabled:
+            return
+        
         try:
             # 获取当前角度值
             with self.lock:
@@ -145,9 +157,10 @@ class JointAngleProtocol:
 
             # 发送数据
             self.serial.write(self.packet_buffer)
-
         except Exception as e:
             print(f"发送数据出错: {e}")
+            self.serial_enabled = False
+            print("串口通信已禁用")
 
 # 全局实例
 protocol = JointAngleProtocol()
