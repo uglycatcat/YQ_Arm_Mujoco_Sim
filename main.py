@@ -1,3 +1,9 @@
+# if you want to run this project on linux system
+# you need to run this command interminal
+# sudo /home/sunrise/miniconda3/envs/mujoco_env/bin/python main.py
+# because linux dont support normal user receive command from keyboard
+# so the keyboard library will be error
+
 import mujoco as mj
 import mujoco_viewer
 import numpy as np
