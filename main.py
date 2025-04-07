@@ -61,8 +61,6 @@ class RobotArmController:
         pass
        # 这里不执行任何操作，从而屏蔽默认快捷键
 
-
-
     def init_xbox_controller(self):
         """初始化 Xbox 手柄"""
         pygame.init()
@@ -76,7 +74,6 @@ class RobotArmController:
         self.joystick.init()
         print(f"已连接手柄：{self.joystick.get_name()}")
         
-
         # 手柄输入映射
         self.AXIS_LEFT_X = 0  # 左摇杆 X 轴
         self.AXIS_LEFT_Y = 1  # 左摇杆 Y 轴
