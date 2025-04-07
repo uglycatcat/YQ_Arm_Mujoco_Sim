@@ -51,8 +51,9 @@ class JointAngleProtocol:
         0xef1f, 0xff3e, 0xcf5d, 0xdf7c, 0xaf9b, 0xbfba, 0x8fd9, 0x9ff8,
         0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
     ]
-
-    def __init__(self, port="/dev/ttyUSB0", baudrate=115200):
+    
+#/dev/ttyUSB0
+    def __init__(self, port="COM5", baudrate=115200):
         """初始化串口通信协议"""
         self.serial = None
         self.running = Event()
@@ -110,7 +111,7 @@ class JointAngleProtocol:
     def _send_loop(self):
         """优化的发送循环"""
         interval = 0.02  # 50Hz
-        next_send = time.monotonic() + interval  # 使用monotonic时钟
+        next_send = time.monotonic()
         
         while self.running.is_set():
             try:
@@ -120,7 +121,10 @@ class JointAngleProtocol:
                     next_send = current_time + interval
                     self.seq = (self.seq + 1) & 0xFFFF
                 else:
-                    time.sleep(max(0, (next_send - current_time) * 0.8))
+                    # 使用更精确的休眠时间
+                    sleep_time = next_send - current_time
+                    if sleep_time > 0.001:  # 只对较长的休眠时间使用sleep
+                        time.sleep(sleep_time * 0.8)
             except Exception as e:
                 print(f"发送循环错误: {e}")
                 time.sleep(0.1)
@@ -135,28 +139,33 @@ class JointAngleProtocol:
             with self.lock:
                 current_angles = self.joint_angles
 
+            # 预分配缓冲区，避免重复创建
+            angles_buffer = bytearray(12)
+            header_buffer = bytearray(8)
+            packet_buffer = bytearray(22)
+
             # 打包角度数据
-            struct.pack_into('<HHHHHH', self.angles_buffer, 0,
+            struct.pack_into('<HHHHHH', angles_buffer, 0,
                 *(self._convert_angle_to_uint16(angle) for angle in current_angles))
 
             # 打包头部
-            struct.pack_into('<HBHHB', self.header_buffer, 0,
+            struct.pack_into('<HBHHB', header_buffer, 0,
                 0xAAAA,     # 起始标志
                 0x02,       # 控制字节
-                12,        # 数据长度（固定为12）
+                12,        # 数据长度
                 self.seq,   # 序号
                 0x13       # 命令ID
             )
 
             # 组合数据并计算CRC
-            self.packet_buffer[0:8] = self.header_buffer
-            self.packet_buffer[8:20] = self.angles_buffer
-            crc_low, crc_high = self.calculate_crc16(self.packet_buffer[0:20])
-            self.packet_buffer[20] = crc_low
-            self.packet_buffer[21] = crc_high
+            packet_buffer[0:8] = header_buffer
+            packet_buffer[8:20] = angles_buffer
+            crc_low, crc_high = self.calculate_crc16(packet_buffer[0:20])
+            packet_buffer[20] = crc_low
+            packet_buffer[21] = crc_high
 
             # 发送数据
-            self.serial.write(self.packet_buffer)
+            self.serial.write(packet_buffer)
         except Exception as e:
             print(f"发送数据出错: {e}")
             self.serial_enabled = False

@@ -47,17 +47,11 @@ class RobotArmController:
         self.control_mode = 0
         
         print("当前控制模式：键盘模式")
-        
 
         # 手柄输入平滑滤波
         self.current_trans = np.zeros(3)  # 当前实际输出的平移值
         self.current_rot = np.zeros(3)    # 当前实际输出的旋转值
-        self.smooth_factor = 0.3          # 平滑系数，值越小动作越平滑 滤波系数
-
-        #串口测试相关
-        self.last_serial_time = time.time()
-        self.serial_count = 0
-        self.print_interval = 1.0  # 每秒打印一次频率
+        self.smooth_factor = 0.3          # 平滑系数
 
         # 关节控制模式的平滑滤波
         self.current_joint_values = np.zeros(3)  # 当前实际输出的关节值
@@ -260,7 +254,12 @@ class RobotArmController:
     def run(self):
         """主循环"""
         last_update = time.time()
+        print_counter = 0
+        print_interval = 10  # 每10次打印一次
+
         while self.viewer.is_alive:
+            loop_start_time = time.time()
+            
             has_input = False
             current_pos = self.data.xpos[self.end_effector_id].copy()
             current_rot = R.from_matrix(self.data.xmat[self.end_effector_id].reshape(3, 3))
@@ -299,28 +298,25 @@ class RobotArmController:
                 
                 mj.mj_forward(self.model, self.data)
                 
-                # 更新完所有关节后，一次性发送到串口
+                # 更新关节角度到串口协议
                 protocol.update_angles([self.data.qpos[i] for i in self.control_list])
                     
             else:
-                # 处理输入
+                # 末端控制模式，需要求解IK
                 if self.control_mode == 0:  # 键盘模式
                     trans, rot = self.handle_keyboard_input()
                 else:  # Xbox 手柄模式
                     trans, rot = self.handle_xbox_input()
 
-                if np.any(trans != 0):
+                # 修改输入检测逻辑
+                if np.any(np.abs(trans) > 1e-6) or np.any(np.abs(rot) > 1e-6):
                     current_pos += trans
-                    has_input = True
-                if np.any(rot != 0):
                     current_rot = R.from_rotvec(rot) * current_rot
                     has_input = True
 
                 # 仅在有输入时执行IK
                 if has_input:
-                    t = time.time()
                     res = self.solve_ik(current_pos, current_rot)
-                    print(time.time() - t)
                     if res is not None and res.success:
                         for i, joint_idx in enumerate(self.control_list):
                             self.data.qpos[joint_idx] = res.x[i]
@@ -329,10 +325,17 @@ class RobotArmController:
                         mj.mj_step(self.model, self.data)
                     else:
                         print("IK求解失败")
+
             # 控制更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
                 self.viewer.render()
                 last_update = time.time()
+                
+                print_counter += 1
+                if print_counter >= print_interval:
+                    loop_end_time = time.time()
+                    print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")
+                    print_counter = 0
 
         # 程序结束时关闭串口
         protocol.stop()
