@@ -18,6 +18,11 @@ import glfw
 #引入自定义串口协议
 from protocol import protocol
 
+# 在文件开头定义全局变量
+if_mujoco_render = 0  
+# 默认为1，表示创建窗口
+# 更改为0，表示不创建窗口
+
 class RobotArmController:
     def __init__(self, model_path):
         # 初始化 MuJoCo 模型和数据
@@ -38,8 +43,12 @@ class RobotArmController:
         self.ROT_STEP = np.radians(1)  # 旋转步长 0.2度（降低五倍）
 
         # 初始化观察器
-        self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=800, height=500)
-        glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
+        if if_mujoco_render:  # 根据全局变量决定是否创建窗口
+            self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=800, height=500)
+            glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
+        else:
+            self.viewer = None  # 不创建窗口
+
         # 初始化 Xbox 手柄
         self.init_xbox_controller()
 
@@ -254,7 +263,7 @@ class RobotArmController:
         print_counter = 0
         print_interval = 10  # 每10次打印一次
 
-        while self.viewer.is_alive:
+        while self.viewer.is_alive if self.viewer else True:  # 根据是否创建窗口决定循环条件
             loop_start_time = time.time()
             
             has_input = False
@@ -324,19 +333,21 @@ class RobotArmController:
                         print("IK求解失败")
 
             # 控制更新频率
-            if (time.time() - last_update) > 0.02:  # 50Hz
+            if if_mujoco_render and (time.time() - last_update) > 0.02:  # 50Hz
                 self.viewer.render()
                 last_update = time.time()
-                
-                print_counter += 1
-                if print_counter >= print_interval:
-                    loop_end_time = time.time()
-                    print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")
-                    print_counter = 0
+
+            # 输出控制循环耗时
+            loop_end_time = time.time()
+            print_counter += 1
+            if print_counter >= print_interval:
+                print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")
+                print_counter = 0
 
         # 程序结束时关闭串口
         protocol.stop()
-        self.viewer.close()
+        if self.viewer:
+            self.viewer.close()
         pygame.quit()
 
 # 运行控制器
