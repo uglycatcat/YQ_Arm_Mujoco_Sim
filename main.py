@@ -38,7 +38,7 @@ class RobotArmController:
         self.ROT_STEP = np.radians(1)  # 旋转步长 0.2度（降低五倍）
 
         # 初始化观察器
-        self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data)
+        self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=800, height=500)
         glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
         # 初始化 Xbox 手柄
         self.init_xbox_controller()
