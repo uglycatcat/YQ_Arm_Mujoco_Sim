@@ -19,7 +19,7 @@ import glfw
 from protocol import protocol
 
 # 在文件开头定义全局变量
-if_mujoco_render = 1  
+if_mujoco_render = 0  
 # 默认为1，表示创建窗口
 # 更改为0，表示不创建窗口
 
