@@ -1,3 +1,9 @@
+# if you want to run this project on linux system
+# you need to run this command interminal
+# sudo /home/sunrise/miniconda3/envs/mujoco_env/bin/python main.py
+# because linux dont support normal user receive command from keyboard
+# so the keyboard library will be error
+
 import mujoco as mj
 import mujoco_viewer
 import numpy as np
@@ -11,6 +17,11 @@ import glfw
 
 #引入自定义串口协议
 from protocol import protocol
+
+# 在文件开头定义全局变量
+if_mujoco_render = 0  
+# 默认为1，表示创建窗口
+# 更改为0，表示不创建窗口
 
 class RobotArmController:
     def __init__(self, model_path):
@@ -32,8 +43,12 @@ class RobotArmController:
         self.ROT_STEP = np.radians(1)  # 旋转步长 0.2度（降低五倍）
 
         # 初始化观察器
-        self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data)
-        glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
+        if if_mujoco_render:  # 根据全局变量决定是否创建窗口
+            self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=800, height=500)
+            glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
+        else:
+            self.viewer = None  # 不创建窗口
+
         # 初始化 Xbox 手柄
         self.init_xbox_controller()
 
@@ -41,19 +56,19 @@ class RobotArmController:
         self.control_mode = 0
         
         print("当前控制模式：键盘模式")
-        
 
         # 手柄输入平滑滤波
-        self.trans_filter = np.zeros(3)
-        self.rot_filter = np.zeros(3)
-        self.filter_alpha = 0.2  # 滤波系数
+        self.current_trans = np.zeros(3)  # 当前实际输出的平移值
+        self.current_rot = np.zeros(3)    # 当前实际输出的旋转值
+        self.smooth_factor = 0.3          # 平滑系数
 
-
+        # 关节控制模式的平滑滤波
+        self.current_joint_values = np.zeros(3)  # 当前实际输出的关节值
+        self.smooth_factor_joint = 0.1          # 关节控制的平滑系数
+        
     def disable_mujoco_keys(self,window, key, scancode, action, mods):
         pass
        # 这里不执行任何操作，从而屏蔽默认快捷键
-
-
 
     def init_xbox_controller(self):
         """初始化 Xbox 手柄"""
@@ -68,7 +83,6 @@ class RobotArmController:
         self.joystick.init()
         print(f"已连接手柄：{self.joystick.get_name()}")
         
-
         # 手柄输入映射
         self.AXIS_LEFT_X = 0  # 左摇杆 X 轴
         self.AXIS_LEFT_Y = 1  # 左摇杆 Y 轴
@@ -101,6 +115,10 @@ class RobotArmController:
             # 仅更新可控关节
             for i, joint_idx in enumerate(self.control_list):
                 self.data.qpos[joint_idx] = q[i]
+            
+            self.data.qpos[2] = self.data.qpos[3] = self.data.qpos[1]  # joint3 = joint2_2
+            self.data.qpos[5] = self.data.qpos[4]  # 根据实际机械结构调整
+            self.data.qpos[6] = -self.data.qpos[5]
             mj.mj_forward(self.model, self.data)
             
             # 计算误差
@@ -145,8 +163,8 @@ class RobotArmController:
 
     def handle_xbox_input(self):
         """处理 Xbox 手柄输入"""
-        trans = np.zeros(3)
-        rot = np.zeros(3)
+        target_trans = np.zeros(3)
+        target_rot = np.zeros(3)
 
         # 初始化按键状态（如果尚未初始化）
         if not hasattr(self, 'button_state'):
@@ -160,44 +178,45 @@ class RobotArmController:
             }
 
         # 处理事件
-        for event in pygame.event.get():
-            if event.type == pygame.JOYAXISMOTION:
-                # 左摇杆控制 X 和 Y 轴平移
-                if event.axis == self.AXIS_LEFT_X:
-                    trans[1] = 1 if event.value > 0.5 else (-1 if event.value < -0.5 else 0)
-                elif event.axis == self.AXIS_LEFT_Y:
-                    trans[0] = -1 if event.value > 0.5 else (1 if event.value < -0.5 else 0)
-                # 右摇杆控制 Z 轴平移
-                elif event.axis == self.AXIS_RIGHT_Y:
-                    trans[2] = -1 if event.value > 0.5 else (1 if event.value < -0.5 else 0)
+        pygame.event.pump()
 
-            elif event.type == pygame.JOYBUTTONDOWN:
-                # 检测按键按下
+        # 读取摇杆输入作为目标值
+        left_x = self.apply_deadzone(self.joystick.get_axis(self.AXIS_LEFT_X))
+        left_y = self.apply_deadzone(self.joystick.get_axis(self.AXIS_LEFT_Y))
+        right_y = self.apply_deadzone(self.joystick.get_axis(self.AXIS_RIGHT_Y))
+
+        # 映射摇杆输入到目标平移值
+        if abs(left_x) > 0.1:
+            target_trans[1] = (abs(left_x) - 0.1) * (0.9 / 0.9) * (1 if left_x > 0 else -1)
+        if abs(left_y) > 0.1:
+            target_trans[0] = (abs(left_y) - 0.1) * (0.9 / 0.9) * (1 if left_y > 0 else -1)
+        if abs(right_y) > 0.1:
+            target_trans[2] = (abs(right_y) - 0.1) * (0.9 / 0.9) * (-1 if right_y > 0 else 1)
+
+        # 处理按钮事件
+        for event in pygame.event.get():
+            if event.type == pygame.JOYBUTTONDOWN:
                 if event.button in self.button_state:
                     self.button_state[event.button] = True
-
             elif event.type == pygame.JOYBUTTONUP:
-                # 检测按键松开
                 if event.button in self.button_state:
                     self.button_state[event.button] = False
 
-        # 根据按键状态设置旋转
-        if self.button_state[self.BUTTON_A]:  # A 按钮控制绕 X 轴正向旋转
-            rot[0] = 1
-        if self.button_state[self.BUTTON_B]:  # B 按钮控制绕 X 轴反向旋转
-            rot[0] = -1
-        if self.button_state[2]:  # X 按钮控制绕 Y 轴正向旋转
-            rot[1] = 1
-        if self.button_state[3]:  # Y 按钮控制绕 Y 轴反向旋转
-            rot[1] = -1
-        if self.button_state[4]:  # 左肩按钮控制绕 Z 轴正向旋转
-            rot[2] = 1
-        if self.button_state[5]:  # 右肩按钮控制绕 Z 轴反向旋转
-            rot[2] = -1
+        # 根据按键状态设置目标旋转值
+        if self.button_state[self.BUTTON_A]: target_rot[0] = 1
+        if self.button_state[self.BUTTON_B]: target_rot[0] = -1
+        if self.button_state[2]: target_rot[1] = 1
+        if self.button_state[3]: target_rot[1] = -1
+        if self.button_state[4]: target_rot[2] = 1
+        if self.button_state[5]: target_rot[2] = -1
 
-        # 将输入信号映射到步长
-        trans *= self.TRANS_STEP
-        rot *= self.ROT_STEP
+        # 平滑过渡到目标值
+        self.current_trans += self.smooth_factor * (target_trans - self.current_trans)
+        self.current_rot += self.smooth_factor * (target_rot - self.current_rot)
+
+        # 将平滑后的输入信号映射到步长
+        trans = self.current_trans * self.TRANS_STEP
+        rot = self.current_rot * self.ROT_STEP
 
         return trans, rot
 
@@ -241,51 +260,94 @@ class RobotArmController:
     def run(self):
         """主循环"""
         last_update = time.time()
-        while self.viewer.is_alive:
+        print_counter = 0
+        print_interval = 10  # 每10次打印一次
+
+        while self.viewer.is_alive if self.viewer else True:  # 根据是否创建窗口决定循环条件
+            loop_start_time = time.time()
+            
             has_input = False
             current_pos = self.data.xpos[self.end_effector_id].copy()
             current_rot = R.from_matrix(self.data.xmat[self.end_effector_id].reshape(3, 3))
 
             # 切换控制模式
             if keyboard.is_pressed('space'):
-                self.control_mode = 1 - self.control_mode  # 切换模式
-                print(f"切换到 {'Xbox 手柄' if self.control_mode else '键盘'} 模式")
+                self.control_mode = (self.control_mode + 1) % 3  # 在三种模式间切换
+                mode_names = ['键盘', 'Xbox 手柄', 'Xbox 手柄关节']
+                print(f"切换到 {mode_names[self.control_mode]} 模式")
                 time.sleep(0.5)  # 防止连击
 
             # 处理输入
-            if self.control_mode == 0:  # 键盘模式
-                trans, rot = self.handle_keyboard_input()
-            else:  # Xbox 手柄模式
+            if self.control_mode == 2:
+                #该模式下，使用Xbox手柄控制关节角度
                 trans, rot = self.handle_xbox_input()
+                
+                # 设置关节角度变化步长
+                joint_step = 0.01
+                
+                # 目标关节值
+                target_joint_values = trans[:3]  # 只取前三个关节的控制量
+                
+                # 平滑过渡到目标值
+                self.current_joint_values += self.smooth_factor_joint * (target_joint_values - self.current_joint_values)
+                
+                # 更新所有控制关节的角度
+                for i, joint_idx in enumerate(self.control_list[:3]):
+                    # 使用平滑后的值计算新角度
+                    new_angle = self.data.qpos[joint_idx] + self.current_joint_values[i] * joint_step
+                    new_angle = np.clip(new_angle, 
+                                      self.model.jnt_range[joint_idx, 0],
+                                      self.model.jnt_range[joint_idx, 1])
+                    
+                    self.data.qpos[joint_idx] = new_angle
+                    self.data.ctrl[joint_idx] = new_angle
+                
+                mj.mj_forward(self.model, self.data)
+                
+                # 更新关节角度到串口协议
+                protocol.update_angles([self.data.qpos[i] for i in self.control_list])
+                    
+            else:
+                # 末端控制模式，需要求解IK
+                if self.control_mode == 0:  # 键盘模式
+                    trans, rot = self.handle_keyboard_input()
+                else:  # Xbox 手柄模式
+                    trans, rot = self.handle_xbox_input()
 
-            if np.any(trans != 0):
-                current_pos += trans
-                has_input = True
-            if np.any(rot != 0):
-                current_rot = R.from_rotvec(rot) * current_rot
-                has_input = True
+                # 修改输入检测逻辑
+                if np.any(np.abs(trans) > 1e-6) or np.any(np.abs(rot) > 1e-6):
+                    current_pos += trans
+                    current_rot = R.from_rotvec(rot) * current_rot
+                    has_input = True
 
-            # 仅在有输入时执行IK
-            if has_input:
-                res = self.solve_ik(current_pos, current_rot)
-                if res is not None and res.success:
-                    for i, joint_idx in enumerate(self.control_list):
-                        self.data.qpos[joint_idx] = res.x[i]
-                    # 更新关节角度到串口协议（如果串口可用）
-                    if protocol.serial_enabled:
+                # 仅在有输入时执行IK
+                if has_input:
+                    res = self.solve_ik(current_pos, current_rot)
+                    if res is not None and res.success:
+                        for i, joint_idx in enumerate(self.control_list):
+                            self.data.qpos[joint_idx] = res.x[i]
+                        # 更新关节角度到串口协议
                         protocol.update_angles([self.data.qpos[i] for i in self.control_list])
-                    mj.mj_step(self.model, self.data)
-                else:
-                    print("IK求解失败")
-            
+                        mj.mj_step(self.model, self.data)
+                    else:
+                        print("IK求解失败")
+
             # 控制更新频率
-            if (time.time() - last_update) > 0.02:  # 50Hz
+            if if_mujoco_render and (time.time() - last_update) > 0.02:  # 50Hz
                 self.viewer.render()
                 last_update = time.time()
 
+            # 输出控制循环耗时
+            loop_end_time = time.time()
+            print_counter += 1
+            if print_counter >= print_interval:
+                print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")
+                print_counter = 0
+
         # 程序结束时关闭串口
         protocol.stop()
-        self.viewer.close()
+        if self.viewer:
+            self.viewer.close()
         pygame.quit()
 
 # 运行控制器
