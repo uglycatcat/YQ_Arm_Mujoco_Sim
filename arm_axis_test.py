@@ -45,8 +45,11 @@ def device_input_angles():
             if not is_xbox_connected():
                 print("无法切换到手柄模式，手柄未连接。")
             else:
-                print("切换设备")
                 is_keyboard = not is_keyboard
+                if is_keyboard:
+                    print("切换到键盘模式")
+                else:
+                    print("切换到手柄模式")
                 time.sleep(0.5)
     else:
         space_pressed = False  # 重置标志位
@@ -107,10 +110,13 @@ def xbox_input():
     global pre_angles  # 使用全局变量
     pygame.event.pump()  # 处理事件
 
+    joystick = pygame.joystick.Joystick(0)  # 获取手柄对象
+    joystick.init()  # 初始化手柄
+
     # 读取摇杆输入作为目标值
-    left_x = apply_deadzone(pygame.joystick.Joystick(0).get_axis(0))  # 左摇杆 X 轴
-    left_y = apply_deadzone(pygame.joystick.Joystick(0).get_axis(1))  # 左摇杆 Y 轴
-    right_y = apply_deadzone(pygame.joystick.Joystick(0).get_axis(2))  # 右摇杆 Y 轴
+    left_x = apply_deadzone(joystick.get_axis(0))  # 左摇杆 X 轴
+    left_y = apply_deadzone(joystick.get_axis(1))  # 左摇杆 Y 轴
+    right_y = apply_deadzone(joystick.get_axis(2))  # 右摇杆 Y 轴
 
     # 映射摇杆输入到目标角度值
     pre_angles[0] = normalize_angle(pre_angles[0] + left_x * rotation_speed)  # 乘以一个系数以调整灵敏度
