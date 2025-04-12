@@ -52,8 +52,8 @@ class JointAngleProtocol:
         0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
     ]
     
-#/dev/ttyUSB0
-    def __init__(self, port="COM5", baudrate=115200):
+#COM5
+    def __init__(self, port="/dev/ttyUSB0", baudrate=115200):
         """初始化串口通信协议"""
         self.serial = None
         self.running = Event()

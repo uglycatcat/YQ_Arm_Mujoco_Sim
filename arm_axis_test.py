@@ -5,6 +5,9 @@
 # 本程序内包含两进程，一个用于处理键盘活着Xbox的输入，一个用于处理下位机协议发送（每次发送六个位置数据）
 # 协议格式，数据内容参考protocol.py，发送频率为50Hz
 # 当前程序有bug，无论window还是linux，都无法接收蓝牙Xbox数据
+# 由于linux操作系统对键盘的权限管理，运行此程序需指令
+# sudo /home/sunrise/miniconda3/envs/mujoco_env/bin/python arm_axis_test.py
+# Linux系统内报错ALSA相关为音频流报错，无影响（不知原因）
 
 import mujoco_viewer
 import pygame
