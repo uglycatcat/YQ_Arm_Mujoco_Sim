@@ -21,7 +21,6 @@ pre_angles = [0.0, 0.0, 0.0]  # 存储前三轴角度值
 after_angles = [0.0, 0.0, 0.0] # 存储后三轴角度值
 is_keyboard = True # 判断是否使用键盘输入
 space_pressed = False # 判断是否按下空格键
-rotation_speed = 0.001 # 控制旋转速度
 
 # 确保角度在0到2*pi之间
 def normalize_angle(angle):
@@ -90,19 +89,58 @@ def cv_input_angles():
 # 每个轴的数据范围为0-2*pi四字节浮点数
 # 初始值为0
 def keyboard_input():
-    global pre_angles,rotation_speed  # 使用全局变量
-    if keyboard.is_pressed('a'):
-        pre_angles[0] = normalize_angle(pre_angles[0] + rotation_speed)  # 控制第一轴
-    if keyboard.is_pressed('d'):
-        pre_angles[0] = normalize_angle(pre_angles[0] - rotation_speed)
-    if keyboard.is_pressed('w'):
-        pre_angles[1] = normalize_angle(pre_angles[1] + rotation_speed)  # 控制第二轴
-    if keyboard.is_pressed('s'):
-        pre_angles[1] = normalize_angle(pre_angles[1] - rotation_speed)
-    if keyboard.is_pressed('q'):
-        pre_angles[2] = normalize_angle(pre_angles[2] + rotation_speed)  # 控制第三轴
-    if keyboard.is_pressed('e'):
-        pre_angles[2] = normalize_angle(pre_angles[2] - rotation_speed)
+    global pre_angles  # 使用全局变量
+    
+    # 初始化参数
+    if not hasattr(keyboard_input, 'max_speed'):
+        keyboard_input.max_speed = 0.0008
+        keyboard_input.smooth_factor = 0.01  # 平滑因子，值越大越平滑
+        keyboard_input.current_speeds = [0.0, 0.0, 0.0]  # 每个轴的当前速度
+    
+    # 定义按键与轴和方向的映射
+    key_actions = {
+        'a': (0, 1),    # 轴0，正向
+        'd': (0, -1),   # 轴0，负向
+        'w': (1, 1),    # 轴1，正向
+        's': (1, -1),   # 轴1，负向
+        'q': (2, 1),    # 轴2，正向
+        'e': (2, -1)    # 轴2，负向
+    }
+    
+    # 检查每个按键并更新速度
+    any_key_pressed = False
+    for key, (axis, direction) in key_actions.items():
+        if keyboard.is_pressed(key):
+            any_key_pressed = True
+            # 计算目标速度（考虑方向）
+            target_speed = direction * keyboard_input.max_speed
+            # 平滑过渡到目标速度
+            keyboard_input.current_speeds[axis] += keyboard_input.smooth_factor * (target_speed - keyboard_input.current_speeds[axis])
+    
+    # 如果没有按键被按下，逐渐减速
+    if not any_key_pressed:
+        for i in range(3):
+            if abs(keyboard_input.current_speeds[i]) > 0.00001:  # 小阈值防止抖动
+                keyboard_input.current_speeds[i] *= (1 - keyboard_input.smooth_factor)
+            else:
+                keyboard_input.current_speeds[i] = 0.0
+    
+    # 应用速度更新角度（确保速度不超过最大速度）
+    for i in range(3):
+        # 限制速度范围（正负方向）
+        keyboard_input.current_speeds[i] = max(-keyboard_input.max_speed, 
+                                            min(keyboard_input.max_speed, 
+                                                keyboard_input.current_speeds[i]))
+        pre_angles[i] = normalize_angle(pre_angles[i] + keyboard_input.current_speeds[i])
+    
+    # 控制最大速度
+    if keyboard.is_pressed('z') and keyboard_input.max_speed < 0.0016:
+        keyboard_input.max_speed = min(keyboard_input.max_speed + 0.0002, 0.0016)
+        time.sleep(0.1)
+    if keyboard.is_pressed('x') and keyboard_input.max_speed > 0.0004:
+        keyboard_input.max_speed = max(keyboard_input.max_speed - 0.0002, 0.0004)
+        time.sleep(0.1)
+    
     return pre_angles
 
 # 获取通过Xbox输入的角度值
@@ -112,6 +150,10 @@ def keyboard_input():
 # 初始值为0
 def xbox_input():
     global pre_angles  # 使用全局变量
+    # 初始化滤波因子
+    if not hasattr(xbox_input,'filter_factor'):
+        xbox_input.filter_factor = 0.001
+        
     pygame.event.pump()  # 处理事件
 
     joystick = pygame.joystick.Joystick(0)  # 获取手柄对象
@@ -123,9 +165,9 @@ def xbox_input():
     right_y = apply_deadzone(joystick.get_axis(2))  # 右摇杆 Y 轴
 
     # 映射摇杆输入到目标角度值
-    pre_angles[0] = normalize_angle(pre_angles[0] + left_x * rotation_speed)  # 乘以一个系数以调整灵敏度
-    pre_angles[1] = normalize_angle(pre_angles[1] + left_y * rotation_speed)
-    pre_angles[2] = normalize_angle(pre_angles[2] + right_y * rotation_speed)
+    pre_angles[0] = normalize_angle(pre_angles[0] + left_x * xbox_input.filter_factor)  # 乘以一个系数以调整灵敏度
+    pre_angles[1] = normalize_angle(pre_angles[1] + left_y * xbox_input.filter_factor)
+    pre_angles[2] = normalize_angle(pre_angles[2] + right_y * xbox_input.filter_factor)
 
     return pre_angles  # 返回更新后的角度值
 
@@ -153,7 +195,7 @@ def main():
             protocol.update_angles(input_angles)
 
             # 每1000次循环在终端打印一次数据
-            if count % 1000 == 0:
+            if count % 100 == 0:
                 print(input_angles)
             count += 1
 
