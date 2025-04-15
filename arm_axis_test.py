@@ -21,6 +21,7 @@ pre_angles = [0.0, 0.0, 0.0]  # 存储前三轴角度值
 after_angles = [0.0, 0.0, 0.0] # 存储后三轴角度值
 is_keyboard = True # 判断是否使用键盘输入
 space_pressed = False # 判断是否按下空格键
+joystick = None  # 全局手柄对象，只初始化一次
 
 # 确保角度在0到2*pi之间
 def normalize_angle(angle):
@@ -65,14 +66,7 @@ def device_input_angles():
 
 # 检测 Xbox 手柄是否连接
 def is_xbox_connected():
-    pygame.init()
-    pygame.joystick.init()
-    connected = pygame.joystick.get_count() > 0
-    if connected:
-        print("已连接手柄。")
-    else:
-        print("未检测到手柄，请连接后重试。")
-    return connected
+    return pygame.joystick.get_count() > 0
 
 # 获取通过CV解算出的角度值
 # 返回长度为3的数组
@@ -149,27 +143,29 @@ def keyboard_input():
 # 每个轴的数据范围为0-2*pi四字节浮点数
 # 初始值为0
 def xbox_input():
-    global pre_angles  # 使用全局变量
-    # 初始化滤波因子
-    if not hasattr(xbox_input,'filter_factor'):
+    global pre_angles, joystick
+
+    if joystick is None:
+        print("手柄尚未初始化，跳过xbox输入。")
+        return pre_angles
+
+    pygame.event.pump()
+
+    # 检查是否有 filter_factor 属性
+    if not hasattr(xbox_input, 'filter_factor'):
         xbox_input.filter_factor = 0.001
-        
-    pygame.event.pump()  # 处理事件
 
-    joystick = pygame.joystick.Joystick(0)  # 获取手柄对象
-    joystick.init()  # 初始化手柄
+    # 获取摇杆值
+    left_x = apply_deadzone(joystick.get_axis(0))  # 左摇杆X
+    left_y = apply_deadzone(joystick.get_axis(1))  # 左摇杆Y
+    right_y = apply_deadzone(joystick.get_axis(3))  # 右摇杆Y（通常是axis 3）
 
-    # 读取摇杆输入作为目标值
-    left_x = apply_deadzone(joystick.get_axis(0))  # 左摇杆 X 轴
-    left_y = apply_deadzone(joystick.get_axis(1))  # 左摇杆 Y 轴
-    right_y = apply_deadzone(joystick.get_axis(2))  # 右摇杆 Y 轴
-
-    # 映射摇杆输入到目标角度值
-    pre_angles[0] = normalize_angle(pre_angles[0] + left_x * xbox_input.filter_factor)  # 乘以一个系数以调整灵敏度
+    # 更新角度
+    pre_angles[0] = normalize_angle(pre_angles[0] + left_x * xbox_input.filter_factor)
     pre_angles[1] = normalize_angle(pre_angles[1] + left_y * xbox_input.filter_factor)
     pre_angles[2] = normalize_angle(pre_angles[2] + right_y * xbox_input.filter_factor)
 
-    return pre_angles  # 返回更新后的角度值
+    return pre_angles
 
 def apply_deadzone(value, deadzone=0.1):
     """摇杆死区处理"""
@@ -178,30 +174,33 @@ def apply_deadzone(value, deadzone=0.1):
     return value
 
 def main():
-    """主程序入口"""
+    global joystick
     pygame.init()
-    clock = pygame.time.Clock()
+    pygame.joystick.init()
 
-    # 启动协议
+    if pygame.joystick.get_count() > 0:
+        joystick = pygame.joystick.Joystick(0)
+        joystick.init()
+        print(f"已初始化手柄：{joystick.get_name()}")
+    else:
+        print("未检测到手柄，将使用键盘控制")
+
+    clock = pygame.time.Clock()
     protocol.start()
 
-    count = 0  # 初始化计数器
+    count = 0
 
     try:
         while True:
-            # 获取输入角度
             input_angles = get_input_angles()
-            # 更新协议中的关节角度
             protocol.update_angles(input_angles)
 
-            # 每1000次循环在终端打印一次数据
             if count % 100 == 0:
                 print(input_angles)
             count += 1
 
-            # 发送数据
-            time.sleep(0.001)  # 1000Hz
-            clock.tick(1000)  # 限制帧率
+            time.sleep(0.001)
+            clock.tick(1000)
     except KeyboardInterrupt:
         print("程序中断，正在停止...")
     finally:
@@ -209,7 +208,4 @@ def main():
         pygame.quit()
 
 if __name__ == "__main__":
-    is_xbox_connected()  # 检测手柄连接状态
     main()
-
-
