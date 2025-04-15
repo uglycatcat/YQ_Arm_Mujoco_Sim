@@ -42,21 +42,19 @@ def get_input_angles():
 def device_input_angles():
     global pre_angles, is_keyboard, space_pressed
     
-    # 检测空格键按下
+    # 检测手柄连接状态
     if keyboard.is_pressed('space'):
-        if not space_pressed:  # 只在第一次按下时触发
+        if not space_pressed:
             space_pressed = True
-            if not is_xbox_connected():
-                print("无法切换到手柄模式，手柄未连接。")
+            # 确保只有在手柄可用时才允许切换到手柄
+            if is_keyboard and joystick is None:
+                print("无法切换到手柄模式，未检测到手柄。")
             else:
                 is_keyboard = not is_keyboard
-                if is_keyboard:
-                    print("切换到键盘模式")
-                else:
-                    print("切换到手柄模式")
+                print("切换到{}模式".format("键盘" if is_keyboard else "手柄"))
                 time.sleep(0.5)
     else:
-        space_pressed = False  # 重置标志位
+        space_pressed = False
     
     if is_keyboard:
         pre_angles = keyboard_input()
@@ -145,15 +143,11 @@ def keyboard_input():
 def xbox_input():
     global pre_angles, joystick
 
-    if joystick is None:
-        print("手柄尚未初始化，跳过xbox输入。")
-        return pre_angles
-
     pygame.event.pump()
 
     # 检查是否有 filter_factor 属性
     if not hasattr(xbox_input, 'filter_factor'):
-        xbox_input.filter_factor = 0.001
+        xbox_input.filter_factor = 0.001 
 
     # 获取摇杆值
     left_x = apply_deadzone(joystick.get_axis(0))  # 左摇杆X
@@ -174,16 +168,9 @@ def apply_deadzone(value, deadzone=0.1):
     return value
 
 def main():
-    global joystick
+    global joystick, is_keyboard
     pygame.init()
     pygame.joystick.init()
-
-    if pygame.joystick.get_count() > 0:
-        joystick = pygame.joystick.Joystick(0)
-        joystick.init()
-        print(f"已初始化手柄：{joystick.get_name()}")
-    else:
-        print("未检测到手柄，将使用键盘控制")
 
     clock = pygame.time.Clock()
     protocol.start()
@@ -192,6 +179,21 @@ def main():
 
     try:
         while True:
+            # 检测手柄连接状态是否变化
+            current_joystick_count = pygame.joystick.get_count()
+            if current_joystick_count > 0:
+                if joystick is None:
+                    # 如果之前未连接，现在连接了，就初始化
+                    joystick = pygame.joystick.Joystick(0)
+                    joystick.init()
+                    print(f"手柄已连接：{joystick.get_name()}")
+            else:
+                if joystick is not None:
+                    # 如果之前有连接，现在断开了，就清空
+                    print("手柄已断开，自动切换到键盘模式")
+                    joystick = None
+                    is_keyboard = True
+
             input_angles = get_input_angles()
             protocol.update_angles(input_angles)
 
