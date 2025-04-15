@@ -85,8 +85,10 @@ def keyboard_input():
     
     # 初始化参数
     if not hasattr(keyboard_input, 'max_speed'):
-        keyboard_input.max_speed = 0.0008
-        keyboard_input.smooth_factor = 0.01  # 平滑因子，值越大越平滑
+        keyboard_input.max_speed = 0.15
+    if not hasattr(xbox_input, 'smooth_factor'):
+        keyboard_input.smooth_factor = 0.002 #数值越高 越快抵达目标速度
+    if not hasattr(xbox_input, 'current_speeds'):
         keyboard_input.current_speeds = [0.0, 0.0, 0.0]  # 每个轴的当前速度
     
     # 定义按键与轴和方向的映射
@@ -112,7 +114,7 @@ def keyboard_input():
     # 如果没有按键被按下，逐渐减速
     if not any_key_pressed:
         for i in range(3):
-            if abs(keyboard_input.current_speeds[i]) > 0.00001:  # 小阈值防止抖动
+            if abs(keyboard_input.current_speeds[i]) > 0.0001:  # 小阈值防止抖动
                 keyboard_input.current_speeds[i] *= (1 - keyboard_input.smooth_factor)
             else:
                 keyboard_input.current_speeds[i] = 0.0
@@ -126,11 +128,11 @@ def keyboard_input():
         pre_angles[i] = normalize_angle(pre_angles[i] + keyboard_input.current_speeds[i])
     
     # 控制最大速度
-    if keyboard.is_pressed('z') and keyboard_input.max_speed < 0.0016:
-        keyboard_input.max_speed = min(keyboard_input.max_speed + 0.0002, 0.0016)
+    if keyboard.is_pressed('z') and keyboard_input.max_speed < 0.3:
+        keyboard_input.max_speed = min(keyboard_input.max_speed + 0.05, 0.3)
         time.sleep(0.1)
-    if keyboard.is_pressed('x') and keyboard_input.max_speed > 0.0004:
-        keyboard_input.max_speed = max(keyboard_input.max_speed - 0.0002, 0.0004)
+    if keyboard.is_pressed('x') and keyboard_input.max_speed > 0.05:
+        keyboard_input.max_speed = max(keyboard_input.max_speed - 0.05, 0.05)
         time.sleep(0.1)
     
     return pre_angles
@@ -145,19 +147,28 @@ def xbox_input():
 
     pygame.event.pump()
 
-    # 检查是否有 filter_factor 属性
-    if not hasattr(xbox_input, 'filter_factor'):
-        xbox_input.filter_factor = 0.001 
+    # 初始化配置参数（只运行一次）
+    if not hasattr(xbox_input, 'max_speed',):
+        xbox_input.max_speed = 0.001  # 可调最大角速度（单位：弧度/帧）
+    if not hasattr(xbox_input, 'filter_alpha'):
+        xbox_input.filter_alpha = 0.2  # 平滑因子 (0-1)，越小越平滑
 
-    # 获取摇杆值
-    left_x = apply_deadzone(joystick.get_axis(0))  # 左摇杆X
-    left_y = apply_deadzone(joystick.get_axis(1))  # 左摇杆Y
-    right_y = apply_deadzone(joystick.get_axis(3))  # 右摇杆Y（通常是axis 3）
+    # 读取摇杆输入，范围 -1 到 1
+    left_x = apply_deadzone(joystick.get_axis(0))
+    left_y = apply_deadzone(joystick.get_axis(1))
+    right_y = apply_deadzone(joystick.get_axis(3))
 
-    # 更新角度
-    pre_angles[0] = normalize_angle(pre_angles[0] + left_x * xbox_input.filter_factor)
-    pre_angles[1] = normalize_angle(pre_angles[1] + left_y * xbox_input.filter_factor)
-    pre_angles[2] = normalize_angle(pre_angles[2] + right_y * xbox_input.filter_factor)
+    # 把摇杆值乘以最大角速度，得到目标速度
+    target_speeds = [
+        left_x * xbox_input.max_speed,
+        left_y * xbox_input.max_speed,
+        right_y * xbox_input.max_speed
+    ]
+
+    # 平滑：一阶低通滤波，或者说指数滑动平均方式更新角度
+    for i in range(3):
+        delta_angle = target_speeds[i]
+        pre_angles[i] = normalize_angle(pre_angles[i] + delta_angle * xbox_input.filter_alpha)
 
     return pre_angles
 
