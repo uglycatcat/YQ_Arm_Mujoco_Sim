@@ -197,10 +197,11 @@ def main():
             input_angles = get_input_angles()
             protocol.update_angles(input_angles)
 
-            if count % 100 == 0:
+            if count % 1000 == 0:
                 print(input_angles)
             count += 1
 
+            # 1000Hz
             time.sleep(0.001)
             clock.tick(1000)
     except KeyboardInterrupt:
