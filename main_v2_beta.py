@@ -5,7 +5,6 @@
 import mujoco as mj
 import mujoco_viewer
 import numpy as np
-import pygame
 import keyboard
 from scipy.spatial.transform import Rotation as R
 from scipy.optimize import minimize
@@ -117,9 +116,6 @@ class RobotArmController:
             机械臂控制器 使用说明
             =============================
 
-            [ 控制模式切换 ]
-            * 键盘模式
-
             [ 键盘模式 控制按键 ]
             - 机械臂末端平移：
             W / S : 前进 / 后退
@@ -142,14 +138,15 @@ class RobotArmController:
         while self.viewer.is_alive if self.viewer else True:  # 根据是否创建窗口决定循环条件
             loop_start_time = time.time()
             
+            # 执行前向动力学计算，更新模型状态
             has_input = False
             current_pos = self.data.xpos[self.end_effector_id].copy()
             current_rot = R.from_matrix(self.data.xmat[self.end_effector_id].reshape(3, 3))
 
-            # 末端控制模式，需要求解IK
+            # 得到键盘输入
             trans, rot = self.handle_keyboard_input()
 
-            # 修改输入检测逻辑
+            # 修改输入检测逻辑,同时传递目标位置
             if np.any(np.abs(trans) > 1e-6) or np.any(np.abs(rot) > 1e-6):
                 current_pos += trans
                 current_rot = R.from_rotvec(rot) * current_rot
@@ -165,7 +162,20 @@ class RobotArmController:
                     mj.mj_step(self.model, self.data)
                 else:
                     print("IK求解失败")
-
+                    
+            # 添加箭头标志物
+            mj.mjv_addGeoms(
+                self.model,
+                self.data,
+                self.viewer.scn,
+                mj.mjtCatBit.mjCAT_DECOR,
+                current_pos,
+                current_rot.as_matrix(),
+                mj.mjtGeom.mjGEOM_ARROW,
+                [0.02, 0.02, 0.1],  # 尺寸
+                [1, 0, 0, 1]  # 颜色
+            )
+            
             # 控制更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
                 self.viewer.render()
@@ -186,12 +196,9 @@ class RobotArmController:
 if __name__ == "__main__":
     # 定义模型目录，存放 URDF 文件
     model_dir = Path("urdf")
-    
     # 构建模型文件的完整路径，指向 scene.xml 文件
     model_path = str(model_dir / "scene.xml")
-    
     # 创建 RobotArmController 实例，传入模型路径
     controller = RobotArmController(model_path)
-    
     # 调用控制器的 run 方法，开始主循环
     controller.run()
