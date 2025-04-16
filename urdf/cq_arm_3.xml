@@ -109,7 +109,7 @@
 <!--actuator关键字表示控制器。这里定义了6个可控关节，joint指定控制的关节-->
   <actuator>
       <position name="joint1" joint="joint1" ctrllimited="false" ctrlrange="-31.4 31.4" />
-      <position joint="joint2_1" ctrllimited="true" ctrlrange="-31.4 31.4" />
+      <position joint="joint2_1" ctrllimited="true" ctrlrange="-3.14 3.14" />
       <position joint="joint4_1" ctrllimited="true" ctrlrange="-3.14 3.14" />
       <position joint="joint6" ctrllimited="true" ctrlrange="-3.14 3.14" />
       <position joint="joint7" ctrllimited="true" ctrlrange="-3.14 3.14" />
