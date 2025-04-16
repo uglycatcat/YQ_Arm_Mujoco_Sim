@@ -29,11 +29,20 @@ if_mujoco_render = 1
 
 class RobotArmController:
     def __init__(self, model_path):
-        # 初始化 MuJoCo 模型和数据
+        
+        # 加载 MuJoCo 模型文件并创建模型对象
         self.model = mj.MjModel.from_xml_path(model_path)
+
+        # 创建与模型对应的数据对象，用于存储仿真状态
         self.data = mj.MjData(self.model)
+
+        # 获取机械臂末端执行器（end effector）的 ID，用于后续控制和计算
         self.end_effector_id = self.model.body("link8").id
+
+        # 执行一次前向动力学计算，初始化模型状态
         mj.mj_forward(self.model, self.data)
+
+        # 打印帮助信息，显示控制器的使用说明
         self.help()
 
         # 启动串口通信协议
@@ -48,7 +57,7 @@ class RobotArmController:
 
         # 初始化观察器
         if if_mujoco_render:  # 根据全局变量决定是否创建窗口
-            self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=800, height=500)
+            self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=1200, height=800)
             glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
         else:
             self.viewer = None  # 不创建窗口

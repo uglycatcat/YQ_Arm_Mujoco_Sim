@@ -1,9 +1,11 @@
 <mujoco model="cq_am">
   <compiler angle="radian"/>
+<!--添加一些默认设置-->
   <default>
       <joint type="hinge" frictionloss="0.1" damping='2' />
       <position ctrllimited="true" ctrlrange="-3.14 3.14" forcelimited="true" forcerange="-500 500" kp="100" />
   </default>
+<!--asset关键字表示模型中物体的材质、几何体、纹理等资源，算是一种宏定义-->
   <asset>
     <material name="blue" rgba="0.23 0.51 0.74 1"/>
     <material name="yellow" rgba="0.99 0.74 0.0 1"/>
@@ -37,7 +39,8 @@
     <mesh name="link7" file="link7.STL"/>
     <mesh name="link8" file="link8.STL"/>
   </asset>
-
+<!--添加世界内物体，定义机械臂的结构和层次关系 -->
+<!--每个子body的位置和姿态都是相对于其父节点定义的 -->
   <worldbody>
     <body name="base_link" pos="0 0 0">
       <geom type="mesh" mesh="base_link" material="BlackAbs" />
@@ -98,11 +101,12 @@
       </body>
     </body>
   </worldbody>
+<!--equality关键字表示约束条件，这里定义了两个约束条件，close_1和close_2，分别约束link2_2和link2_0之间的距离和link3和link4_2之间的距离 -->
   <equality>
     <connect name="close_1" active="true" body1="link2_2" body2="link2_0" anchor="0.20000677 -0.0076388 -0.34641823" solimp="0.95 0.99 0.0001" solref="0.0001 1" />
     <connect name="close_2" active="true" body1="link3" body2="link4_2"   anchor="0.03419 -0.00985 0.08481"          solimp="0.95 0.99 0.0001" solref="0.0001 1" />
   </equality>
-
+<!--actuator关键字表示控制器。这里定义了6个可控关节，joint指定控制的关节-->
   <actuator>
       <position name="joint1" joint="joint1" ctrllimited="false" ctrlrange="-31.4 31.4" />
       <position joint="joint2_1" ctrllimited="true" ctrlrange="-31.4 31.4" />
@@ -111,7 +115,7 @@
       <position joint="joint7" ctrllimited="true" ctrlrange="-3.14 3.14" />
       <position joint="joint8" ctrllimited="true" ctrlrange="-3.14 3.14" />
   </actuator>
-
+<!--keyframe关键字表示关键帧，该home关键帧表示初始状态，qpos表示所有关节的角度。ctrl表示可控关节的角度 -->
   <keyframe>
     <key name="home" qpos="0 0 0 0 0 0 0 0 0 0" ctrl="0 0 0 0 0 0"/>
   </keyframe>
