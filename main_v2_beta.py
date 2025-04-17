@@ -178,7 +178,9 @@ class RobotArmController:
             # 更新目标位置显示
             self.data.mocap_pos[self.mocap_index] = current_pos
             # 设置方向（四元数）
-            self.data.mocap_quat[self.mocap_index] = current_rot.as_quat()
+            quat_xyzw = current_rot.as_quat()  # 输出是 [x, y, z, w]
+            quat_wxyz = np.array([quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]])
+            self.data.mocap_quat[self.mocap_index] = quat_wxyz
             # 有输入时打印控制循环耗时
             if has_input and print_counter >= print_time_interval:
                 print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")       
