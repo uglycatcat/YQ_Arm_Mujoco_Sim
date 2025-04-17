@@ -151,7 +151,7 @@ class RobotArmController:
                 current_pos += trans
                 current_rot = R.from_rotvec(rot) * current_rot
                 has_input = True
-
+            
             # 仅在有输入时执行IK
             if has_input:
                 res = self.solve_ik(current_pos, current_rot)
@@ -163,19 +163,6 @@ class RobotArmController:
                 else:
                     print("IK求解失败")
                     
-            # 添加箭头标志物
-            mj.mjv_addGeoms(
-                self.model,
-                self.data,
-                self.viewer.scn,
-                mj.mjtCatBit.mjCAT_DECOR,
-                current_pos,
-                current_rot.as_matrix(),
-                mj.mjtGeom.mjGEOM_ARROW,
-                [0.02, 0.02, 0.1],  # 尺寸
-                [1, 0, 0, 1]  # 颜色
-            )
-            
             # 控制更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
                 self.viewer.render()
