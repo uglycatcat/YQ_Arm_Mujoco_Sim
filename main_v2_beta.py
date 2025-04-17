@@ -21,9 +21,12 @@ class RobotArmController:
         self.data = mj.MjData(self.model)
         # 获取机械臂末端执行器（end effector）的 ID，用于后续控制和计算
         self.end_effector_id = self.model.body("link8").id
-        # 获取mocap标记点的 ID，用于后续控制和计算
+        # 获取最终位置mocap标记点的 ID，用于测试后续控制和计算
         self.mocap_body_id = self.model.body("target_marker").id
         self.mocap_index = self.mocap_body_id - (self.model.nbody - self.model.nmocap)
+        # 获取joint6的mocap标记点ID，用于测试后续控制和计算
+        self.joint6_mocap_id = self.model.body("joint6_marker").id
+        self.joint6_mocap_index = self.joint6_mocap_id - (self.model.nbody - self.model.nmocap)
         # 执行一次前向动力学计算，初始化模型状态
         mj.mj_forward(self.model, self.data)
         # 打印帮助信息，显示控制器的使用说明
@@ -175,12 +178,21 @@ class RobotArmController:
             # 输出控制循环耗时
             loop_end_time = time.time()
             print_counter += 1
-            # 更新目标位置显示
+            # 更新target_position目标位置显示
             self.data.mocap_pos[self.mocap_index] = current_pos
-            # 设置方向（四元数）
+            # 更新target_position目标位置方向（四元数）
             quat_xyzw = current_rot.as_quat()  # 输出是 [x, y, z, w]
-            quat_wxyz = np.array([quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]])
+            quat_wxyz = np.array([quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]]) # 转换为 [w, x, y, z]
             self.data.mocap_quat[self.mocap_index] = quat_wxyz
+            
+            # 更新joint6_position位置和方向显示
+            joint6_pos = self.data.xpos[self.model.body("link6").id].copy()
+            joint6_rot = R.from_matrix(self.data.xmat[self.model.body("link6").id].reshape(3, 3))
+            self.data.mocap_pos[self.joint6_mocap_index] = joint6_pos
+            joint6_quat_xyzw = joint6_rot.as_quat()
+            joint6_quat_wxyz = np.array([joint6_quat_xyzw[3], joint6_quat_xyzw[0], joint6_quat_xyzw[1], joint6_quat_xyzw[2]])
+            self.data.mocap_quat[self.joint6_mocap_index] = joint6_quat_wxyz
+            
             # 有输入时打印控制循环耗时
             if has_input and print_counter >= print_time_interval:
                 print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")       
