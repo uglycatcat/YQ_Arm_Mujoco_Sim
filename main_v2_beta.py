@@ -177,6 +177,8 @@ class RobotArmController:
             print_counter += 1
             # 更新目标位置显示
             self.data.mocap_pos[self.mocap_index] = current_pos
+            # 设置方向（四元数）
+            self.data.mocap_quat[self.mocap_index] = current_rot.as_quat()
             # 有输入时打印控制循环耗时
             if has_input and print_counter >= print_time_interval:
                 print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")       
@@ -184,7 +186,8 @@ class RobotArmController:
             # 无输入时打印当前位置和姿态
             if not has_input and print_counter >= print_matrix_interval:
                 print(f"当前位置: {current_pos}")
-                print(f"当前姿态: {current_rot.as_quat()}")       
+                print(f"当前姿态: {current_rot.as_quat()}")      
+                # print("mocap当前位置:", self.data.mocap_pos[self.mocap_index]) 
                 print_counter = 0
             
         # 程序结束时关闭串口
