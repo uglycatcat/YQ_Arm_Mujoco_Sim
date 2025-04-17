@@ -21,6 +21,9 @@ class RobotArmController:
         self.data = mj.MjData(self.model)
         # 获取机械臂末端执行器（end effector）的 ID，用于后续控制和计算
         self.end_effector_id = self.model.body("link8").id
+        # 获取mocap标记点的 ID，用于后续控制和计算
+        self.mocap_body_id = self.model.body("target_marker").id
+        self.mocap_index = self.mocap_body_id - (self.model.nbody - self.model.nmocap)
         # 执行一次前向动力学计算，初始化模型状态
         mj.mj_forward(self.model, self.data)
         # 打印帮助信息，显示控制器的使用说明
@@ -133,7 +136,8 @@ class RobotArmController:
         """主循环"""
         last_update = time.time()
         print_counter = 0
-        print_interval = 10  # 每10次打印一次
+        print_time_interval = 20  # 每20次打印一次间隔时间
+        print_matrix_interval = 3000 # 每100次打印一次矩阵
 
         while self.viewer.is_alive if self.viewer else True:  # 根据是否创建窗口决定循环条件
             loop_start_time = time.time()
@@ -171,10 +175,18 @@ class RobotArmController:
             # 输出控制循环耗时
             loop_end_time = time.time()
             print_counter += 1
-            if print_counter >= print_interval and has_input:
-                print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")
+            # 更新目标位置显示
+            self.data.mocap_pos[self.mocap_index] = current_pos
+            # 有输入时打印控制循环耗时
+            if has_input and print_counter >= print_time_interval:
+                print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")       
                 print_counter = 0
-
+            # 无输入时打印当前位置和姿态
+            if not has_input and print_counter >= print_matrix_interval:
+                print(f"当前位置: {current_pos}")
+                print(f"当前姿态: {current_rot.as_quat()}")       
+                print_counter = 0
+            
         # 程序结束时关闭串口
         if self.viewer:
             self.viewer.close()
