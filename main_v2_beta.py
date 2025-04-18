@@ -116,6 +116,23 @@ class RobotArmController:
 
         return trans, rot
 
+    def set_cube_position(self,current_pos,current_rot):
+        # 更新target_position目标位置显示
+        self.data.mocap_pos[self.mocap_index] = current_pos
+        # 更新target_position目标位置方向（四元数）
+        quat_xyzw = current_rot.as_quat()  # 输出是 [x, y, z, w]
+        quat_wxyz = np.array([quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]]) # 转换为 [w, x, y, z]
+        self.data.mocap_quat[self.mocap_index] = quat_wxyz
+        
+        # 更新joint6_position位置显示
+        joint6_pos = self.data.xpos[self.model.body("link6").id].copy()
+        self.data.mocap_pos[self.joint6_mocap_index] = joint6_pos
+        # 更新joint6_position方向（四元数）
+        joint6_rot = R.from_matrix(self.data.xmat[self.model.body("link5").id].reshape(3, 3))
+        joint6_quat_xyzw = joint6_rot.as_quat()
+        joint6_quat_wxyz = np.array([joint6_quat_xyzw[3], joint6_quat_xyzw[0], joint6_quat_xyzw[1], joint6_quat_xyzw[2]])
+        self.data.mocap_quat[self.joint6_mocap_index] = joint6_quat_wxyz
+        
     def help(self):
         print("""
             =============================
@@ -145,8 +162,10 @@ class RobotArmController:
         while self.viewer.is_alive if self.viewer else True:  # 根据是否创建窗口决定循环条件
             loop_start_time = time.time()
             
-            # 执行前向动力学计算，更新模型状态
+            # 定义处理键盘是否有输入的变量
             has_input = False
+            
+            # 获取当前末端执行器的位置和姿态
             current_pos = self.data.xpos[self.end_effector_id].copy()
             current_rot = R.from_matrix(self.data.xmat[self.end_effector_id].reshape(3, 3))
 
@@ -170,6 +189,9 @@ class RobotArmController:
                 else:
                     print("IK求解失败")
                     
+            # 改变标识位姿的方块的位姿
+            self.set_cube_position(current_pos, current_rot)
+            
             # 控制更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
                 self.viewer.render()
@@ -178,21 +200,6 @@ class RobotArmController:
             # 输出控制循环耗时
             loop_end_time = time.time()
             print_counter += 1
-            # 更新target_position目标位置显示
-            self.data.mocap_pos[self.mocap_index] = current_pos
-            # 更新target_position目标位置方向（四元数）
-            quat_xyzw = current_rot.as_quat()  # 输出是 [x, y, z, w]
-            quat_wxyz = np.array([quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]]) # 转换为 [w, x, y, z]
-            self.data.mocap_quat[self.mocap_index] = quat_wxyz
-            
-            # 更新joint6_position位置显示
-            joint6_pos = self.data.xpos[self.model.body("link6").id].copy()
-            self.data.mocap_pos[self.joint6_mocap_index] = joint6_pos
-            # 更新joint6_position方向（四元数）
-            joint6_rot = R.from_matrix(self.data.xmat[self.model.body("link5").id].reshape(3, 3))
-            joint6_quat_xyzw = joint6_rot.as_quat()
-            joint6_quat_wxyz = np.array([joint6_quat_xyzw[3], joint6_quat_xyzw[0], joint6_quat_xyzw[1], joint6_quat_xyzw[2]])
-            self.data.mocap_quat[self.joint6_mocap_index] = joint6_quat_wxyz
             
             # 有输入时打印控制循环耗时
             if has_input and print_counter >= print_time_interval:
