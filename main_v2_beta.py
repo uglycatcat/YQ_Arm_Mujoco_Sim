@@ -185,10 +185,11 @@ class RobotArmController:
             quat_wxyz = np.array([quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]]) # 转换为 [w, x, y, z]
             self.data.mocap_quat[self.mocap_index] = quat_wxyz
             
-            # 更新joint6_position位置和方向显示
+            # 更新joint6_position位置显示
             joint6_pos = self.data.xpos[self.model.body("link6").id].copy()
-            joint6_rot = R.from_matrix(self.data.xmat[self.model.body("link6").id].reshape(3, 3))
             self.data.mocap_pos[self.joint6_mocap_index] = joint6_pos
+            # 更新joint6_position方向（四元数）
+            joint6_rot = R.from_matrix(self.data.xmat[self.model.body("link5").id].reshape(3, 3))
             joint6_quat_xyzw = joint6_rot.as_quat()
             joint6_quat_wxyz = np.array([joint6_quat_xyzw[3], joint6_quat_xyzw[0], joint6_quat_xyzw[1], joint6_quat_xyzw[2]])
             self.data.mocap_quat[self.joint6_mocap_index] = joint6_quat_wxyz
