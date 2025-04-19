@@ -186,7 +186,22 @@ class RobotArmController:
                 
             transformed_pos.extend([x_2d, y_2d])
             
-        return np.array(transformed_pos)
+        # 转换为numpy数组
+        transformed_pos = np.array(transformed_pos)
+        
+        # # 计算并打印相邻点的距离（每两个点一组）
+        # print("\n相邻点距离计算：")
+        # for i in range(0, len(transformed_pos)//2 - 1):
+        #     # 当前点 (x1, y1)
+        #     x1, y1 = transformed_pos[2*i], transformed_pos[2*i+1]
+        #     # 下一个点 (x2, y2)
+        #     x2, y2 = transformed_pos[2*(i+1)], transformed_pos[2*(i+1)+1]
+            
+        #     # 计算欧氏距离
+        #     distance = np.sqrt((x2 - x1)**2 + (y2 - y1)**2)
+        #     print(f"点{i+1} (Link_{i+2}) 到 点{i+2} (Link_{i+3}) 的距离: {distance:.4f}")
+        
+        return transformed_pos
 
     def help(self):
         print("""
