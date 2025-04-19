@@ -11,6 +11,7 @@ from scipy.optimize import minimize
 import time
 from pathlib import Path
 import glfw
+from draw_figure import draw_figure
 
 class RobotArmController:
     
@@ -36,6 +37,8 @@ class RobotArmController:
         # 运动参数
         self.TRANS_STEP = 0.01  # 平移步长 0.2cm（降低五倍）
         self.ROT_STEP = np.radians(1)  # 旋转步长 0.2度（降低五倍）
+        # 初始化绘制窗口
+        draw_figure.start()
         # 初始化观察器
         self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=1200, height=800)
         glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
@@ -138,6 +141,53 @@ class RobotArmController:
         joint6_quat_wxyz = np.array([joint6_quat_xyzw[3], joint6_quat_xyzw[0], joint6_quat_xyzw[1], joint6_quat_xyzw[2]])
         self.data.mocap_quat[self.joint6_mocap_index] = joint6_quat_wxyz
         
+    # 将关键关节节点从三维坐标映射至二维坐标，方便后续进行几何逆解
+    # 映射规则：
+    # 将此五个点的世界三维位置坐标投影至由Z轴和目标LINK坐标（当前为Link6）组成的平面上
+    # 每个三维坐标映射为由X,Y组成的二维坐标。同时世界坐标原点即为二维平面原点
+    # 以原本就位于此平面的link6为例，其二维x应为原本世界坐标下点距离世界Z轴的长度，即sqrt(x^2+y^2)，而二维y即为原来的世界坐标z
+    # 其他点不一定原本就位于此平面上，所以需要特殊处理，其二维x相当于该点在该平面上的垂直投影与平面y轴的距离
+    # X轴上目标link的坐标与原点的方向为正方向，Y轴不特殊处理
+    # 得到长度为10的数组transfromed_pos
+    def transform_ik_data(self):
+        # 获取五个关键点的三维坐标
+        points_3d = [
+            self.data.xpos[self.model.body("link2_1").id].copy(),
+            self.data.xpos[self.model.body("link3").id].copy(),
+            self.data.xpos[self.model.body("link4_1").id].copy(),
+            self.data.xpos[self.model.body("link5").id].copy(),
+            self.data.xpos[self.model.body("link6").id].copy()
+        ]
+
+        # 获取Link6的位置作为参考点
+        link6_pos = points_3d[-1]
+        
+        # 计算投影平面的法向量（Z轴和Link6方向的叉积）
+        z_axis = np.array([0, 0, 1])
+        link6_direction = link6_pos / np.linalg.norm(link6_pos)
+        plane_normal = np.cross(z_axis, link6_direction)
+        plane_normal = plane_normal / np.linalg.norm(plane_normal)
+        
+        # 计算每个点的投影
+        transformed_pos = []
+        for point in points_3d:
+            # 计算点到平面的投影
+            projection = point - np.dot(point, plane_normal) * plane_normal
+            
+            # 计算二维坐标
+            # X坐标：投影点到Z轴的距离
+            x_2d = np.sqrt(projection[0]**2 + projection[1]**2)
+            # Y坐标：投影点的Z坐标
+            y_2d = projection[2]
+            
+            # 根据Link6方向确定X坐标的符号
+            if np.dot(projection[:2], link6_pos[:2]) < 0:
+                x_2d = -x_2d
+                
+            transformed_pos.extend([x_2d, y_2d])
+            
+        return np.array(transformed_pos)
+
     def help(self):
         print("""
             =============================
@@ -163,12 +213,10 @@ class RobotArmController:
         print_counter = 0
         print_time_interval = 20  # 每20次打印一次间隔时间
         print_matrix_interval = 3000 # 每100次打印一次矩阵
-
+        has_input = False # 定义处理键盘是否有输入的变量
+        
         while self.viewer.is_alive if self.viewer else True:  # 根据是否创建窗口决定循环条件
             loop_start_time = time.time()
-            
-            # 定义处理键盘是否有输入的变量
-            has_input = False
             
             # 获取当前末端执行器的位置和姿态
             current_pos = self.data.xpos[self.end_effector_id].copy()
@@ -194,6 +242,9 @@ class RobotArmController:
                 else:
                     print("IK求解失败")
             
+            # 进行新逆解的映射准备同时给绘图线程传递数据
+            draw_figure.update_data(self.transform_ik_data())
+            
             # 控制更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
                 self.viewer.render()
@@ -205,16 +256,18 @@ class RobotArmController:
             
             # 有输入时打印控制循环耗时
             if has_input and print_counter >= print_time_interval:
-                print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")       
+                print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")    
                 print_counter = 0
+                # 最后一次判断has_input后置回标志位
+                has_input = False   
             # 无输入时打印当前位置和姿态
             if not has_input and print_counter >= print_matrix_interval:
                 print(f"当前位置: {current_pos}")
                 print(f"当前姿态: {current_rot.as_quat()}")      
-                # print("mocap当前位置:", self.data.mocap_pos[self.mocap_index]) 
                 print_counter = 0
             
-        # 程序结束时关闭串口
+        draw_figure.stop()
+        # 程序结束时关闭窗口
         if self.viewer:
             self.viewer.close()
 
