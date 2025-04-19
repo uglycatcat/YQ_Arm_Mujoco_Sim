@@ -74,6 +74,11 @@ class RobotArmController:
             self.data.qpos[2] = self.data.qpos[3] = self.data.qpos[1]  # joint3 = joint2_2
             self.data.qpos[5] = self.data.qpos[4]  # 根据实际机械结构调整
             self.data.qpos[6] = -self.data.qpos[5]
+            
+            # 改变标识位姿的方块的位姿
+            self.set_cube_position(target_pos, target_rot)
+            
+            # 执行前向动力学计算，更新模型状态
             mj.mj_forward(self.model, self.data)
             
             # 计算误差
@@ -168,7 +173,7 @@ class RobotArmController:
             # 获取当前末端执行器的位置和姿态
             current_pos = self.data.xpos[self.end_effector_id].copy()
             current_rot = R.from_matrix(self.data.xmat[self.end_effector_id].reshape(3, 3))
-
+            
             # 得到键盘输入
             trans, rot = self.handle_keyboard_input()
 
@@ -188,9 +193,6 @@ class RobotArmController:
                     mj.mj_step(self.model, self.data)
                 else:
                     print("IK求解失败")
-                    
-            # 改变标识位姿的方块的位姿
-            self.set_cube_position(current_pos, current_rot)
             
             # 控制更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
