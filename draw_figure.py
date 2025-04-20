@@ -2,6 +2,8 @@ import pygame
 import numpy as np
 from threading import Thread, Event, Lock
 import time
+import math
+from numpy import degrees
 
 class DrawPointFigure:
     def __init__(self):
@@ -14,6 +16,7 @@ class DrawPointFigure:
         self.scale = 400  # 放大比例（原100，现改为400）
         self.width, self.height = 800, 600  # 窗口大小
         self.font = None  # 初始化为None
+        self.font_size = 30  # 添加字体大小设置
         # 添加背景和坐标轴表面缓存
         self.background = None
         self.axes = None
@@ -71,10 +74,18 @@ class DrawPointFigure:
         if self.point_data is None:
             return
 
-        # 使用预渲染的文本表面
-        text_surfaces = []
+        # 调整起始位置和行间距
         text_y_offset = self.height // 2 + 10
+        line_spacing = 25  # 减小行间距
         
+        # 显示第一个点的坐标
+        x1, y1 = self.point_data[0], self.point_data[1]
+        text = f"Point 1: X={x1:.8f}, Y={y1:.8f}"
+        text_surface = self.font.render(text, True, (0, 0, 0))
+        self.screen.blit(text_surface, (10, text_y_offset))
+        text_y_offset += line_spacing
+        
+        # 显示中间点的差值
         for i in range(0, len(self.point_data)//2 - 1):
             x1, y1 = self.point_data[2*i], self.point_data[2*i+1]
             x2, y2 = self.point_data[2*(i+1)], self.point_data[2*(i+1)+1]
@@ -85,19 +96,28 @@ class DrawPointFigure:
             
             text = f"Link{i+1} -> Link{i+2}: ΔX={dx:.8f}, ΔY={dy:.8f}, Distance={distance:.8f}"
             text_surface = self.font.render(text, True, (0, 0, 0))
-            text_surfaces.append((text_surface, (10, text_y_offset)))
-            text_y_offset += 30
-        
-        # 一次性绘制所有文本
-        for surface, pos in text_surfaces:
-            self.screen.blit(surface, pos)
+            self.screen.blit(text_surface, (10, text_y_offset))
+            text_y_offset += line_spacing
+            
+            # 显示下一个点的坐标
+            text = f"Point {i+2}: X={x2:.8f}, Y={y2:.8f}"
+            text_surface = self.font.render(text, True, (0, 0, 0))
+            self.screen.blit(text_surface, (10, text_y_offset))
+            text_y_offset += line_spacing
+            
+        # 显示最后一个点的逆解角度
+        last_point = self.point_data[-2:]  # 获取最后两个值作为坐标
+        theta_2, theta_3 = solve_ik_geometry(last_point)
+        text = f"IK Angles: θ2={np.degrees(theta_2):.2f}°, θ3={np.degrees(theta_3):.2f}°"
+        text_surface = self.font.render(text, True, (0, 0, 0))
+        self.screen.blit(text_surface, (10, text_y_offset))
 
     def run_loop(self):
         """Pygame 主循环（运行在子线程）"""
         pygame.init()
         self.screen = pygame.display.set_mode((self.width, self.height))
         pygame.display.set_caption("机械臂关节位置图")
-        self.font = pygame.font.SysFont(None, 30)  # 在这里初始化字体
+        self.font = pygame.font.SysFont(None, self.font_size)  # 使用设置的字体大小
 
         while self.running.is_set():
             for event in pygame.event.get():
@@ -135,3 +155,43 @@ class DrawPointFigure:
 
 # 全局实例
 draw_figure = DrawPointFigure()
+
+def solve_ik_geometry(target_pos):
+    # 存储二维目标位置
+    target_x = target_pos[0]
+    target_y = target_pos[1]
+    
+    # 将末端位置偏移到3轴电机末端位置
+    target_x -= 0.078304
+    target_y -= 0.0044872
+    
+    # 坐标点1（假设在原点）
+    P1_x, P1_y = 0.0, 0.0
+    
+    # 坐标点2（距离P1为0.40000，假设在x轴上）
+    P2_x, P2_y = 0.40000, 0.0
+    
+    # 坐标点3（相对于P2的偏移量）
+    P3_x = P2_x + 0.03419
+    P3_y = P2_y + 0.05481
+    
+    # 坐标点4（目标点偏移后的位置）
+    P4_x = target_x
+    P4_y = target_y
+    
+    # 计算P4P1的距离
+    delta_pos4_pos1 = math.sqrt((P4_x - 0.0162178)**2 + (P4_y - 0.136133)**2)
+    
+    # 计算theta_2（∠P2P1P4）
+    a = 0.40000  # P1P2
+    b = delta_pos4_pos1  # P1P4
+    c = math.sqrt((P4_x - P2_x)**2 + (P4_y - P2_y)**2)  # P2P4
+    theta_2 = math.acos((a**2 + b**2 - c**2) / (2 * a * b))
+    
+    # 计算theta_3（∠P2P3P4）
+    a = math.sqrt((P3_x - P2_x)**2 + (P3_y - P2_y)**2)  # P2P3
+    b = 0.40000  # P3P4
+    c = math.sqrt((P4_x - P2_x)**2 + (P4_y - P2_y)**2)  # P2P4
+    theta_3 = math.acos((a**2 + b**2 - c**2) / (2 * a * b))
+    
+    return theta_2, theta_3
