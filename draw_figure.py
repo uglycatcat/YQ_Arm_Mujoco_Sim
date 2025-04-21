@@ -157,41 +157,31 @@ class DrawPointFigure:
 draw_figure = DrawPointFigure()
 
 def solve_ik_geometry(target_pos):
-    # 存储二维目标位置
-    target_x = target_pos[0]
-    target_y = target_pos[1]
+    """逆解几何计算(单位弧度制)"""
     
-    # 将末端位置偏移到3轴电机末端位置
-    target_x -= 0.078304
-    target_y -= 0.0044872
-    
-    # 坐标点1（假设在原点）
-    P1_x, P1_y = 0.0, 0.0
-    
-    # 坐标点2（距离P1为0.40000，假设在x轴上）
-    P2_x, P2_y = 0.40000, 0.0
-    
-    # 坐标点3（相对于P2的偏移量）
-    P3_x = P2_x + 0.03419
-    P3_y = P2_y + 0.05481
-    
-    # 坐标点4（目标点偏移后的位置）
-    P4_x = target_x
-    P4_y = target_y
+    # 计算P4相对于P1点的偏移量
+    x_offset = (target_pos[0] - 0.078304) - 0.03419422 - 0.0162178
+    y_offset = (target_pos[1] - 0.0044872) - 0.05481078 - 0.136133
     
     # 计算P4P1的距离
-    delta_pos4_pos1 = math.sqrt((P4_x - 0.0162178)**2 + (P4_y - 0.136133)**2)
+    distance = math.sqrt(x_offset**2 + y_offset**2)
     
-    # 计算theta_2（∠P2P1P4）
-    a = 0.40000  # P1P2
-    b = delta_pos4_pos1  # P1P4
-    c = math.sqrt((P4_x - P2_x)**2 + (P4_y - P2_y)**2)  # P2P4
-    theta_2 = math.acos((a**2 + b**2 - c**2) / (2 * a * b))
+    # P1P2和P3P4两段长度固定
+    arm_length_1=0.4000
+    arm_length_2=0.4000
     
-    # 计算theta_3（∠P2P3P4）
-    a = math.sqrt((P3_x - P2_x)**2 + (P3_y - P2_y)**2)  # P2P3
-    b = 0.40000  # P3P4
-    c = math.sqrt((P4_x - P2_x)**2 + (P4_y - P2_y)**2)  # P2P4
-    theta_3 = math.acos((a**2 + b**2 - c**2) / (2 * a * b))
+    # 三边构成一个三角形
+    # 计算theta_2（arm_length_1和distance构成的角）
+    theta_2 = math.acos((arm_length_1**2 + distance**2 - arm_length_2**2) / (2 * arm_length_1 * distance))
+    # 计算theta_3（arm_length_1和arm_length_2构成的角）
+    theta_3 = math.acos((arm_length_1**2 + arm_length_2**2 - distance**2) / (2 * arm_length_1 * arm_length_2))
     
+    # temp1得到P4P1两点的y/x的正切值对应的弧度制
+    temp1 = math.atan2(y_offset, x_offset)
+    
+    # 根据计算结果得到真正的theta_2和theta_3
+    theta_2+=temp1
+    theta_3=math.pi/2-(math.pi-theta_2)+theta_3
+    
+    # 返回弧度制的计算结果
     return theta_2, theta_3
