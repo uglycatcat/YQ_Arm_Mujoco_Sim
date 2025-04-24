@@ -38,8 +38,8 @@ class RobotArmController:
         # 启动串口通信协议
         protocol.start()
         # 初始化观察器
-        self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=1200, height=800)
-        glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
+        # self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=1200, height=800)
+        # glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
         
         print("当前键盘控制")
         
@@ -249,7 +249,8 @@ class RobotArmController:
         last_update = time.time()
         print_counter = 0
         
-        while self.viewer.is_alive if self.viewer else True:
+        # while self.viewer.is_alive if self.viewer else True:
+        while True:
             # 检查手柄连接状态
             current_joystick_count = pygame.joystick.get_count()
             if current_joystick_count > 0:
@@ -281,7 +282,7 @@ class RobotArmController:
             
             # 控制更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
-                self.viewer.render()
+                  # self.viewer.render()
                 last_update = time.time()
 
             # 输出控制循环耗时
