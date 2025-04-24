@@ -31,7 +31,7 @@ class RobotArmController:
         # 打印帮助信息，显示控制器的使用说明
         self.help()
         # 运动参数
-        self.TRANS_STEP = 0.0005  # 平移步长 0.2cm（降低五倍）
+        self.TRANS_STEP = 0.0001  # 平移步长 0.2cm（降低五倍）
         self.ROT_STEP = np.radians(0.05)  # 旋转步长 0.2度（降低五倍）
         # 机械臂可控关节索引
         self.control_list = [0, 1, 4, 7, 8, 9]
@@ -51,9 +51,9 @@ class RobotArmController:
         self.space_pressed = False
         
         # 手柄控制参数
-        self.joystick_max_speed = 0.0005  # 最大移动速度
-        self.joystick_filter_alpha = 0.2  # 平滑因子
-        self.joystick_deadzone = 0.1      # 死区阈值
+        self.joystick_max_speed = 0.0001  # 最大移动速度
+        self.joystick_filter_alpha = 0.01  # 平滑因子
+        self.joystick_deadzone = 0.001      # 死区阈值
         
     def disable_mujoco_keys(self,window, key, scancode, action, mods):
         pass
@@ -111,9 +111,9 @@ class RobotArmController:
         pygame.event.pump()
         
         # 读取摇杆输入并应用死区
-        left_y = self.apply_deadzone(self.joystick.get_axis(1))  # 左摇杆Y轴
+        left_y = -self.apply_deadzone(self.joystick.get_axis(1))  # 左摇杆Y轴
         left_x = self.apply_deadzone(self.joystick.get_axis(0))  # 左摇杆X轴
-        right_y = self.apply_deadzone(self.joystick.get_axis(3))  # 右摇杆Y轴
+        right_y = -self.apply_deadzone(self.joystick.get_axis(3))  # 右摇杆Y轴
         
         # 检测手柄按键
         if self.joystick.get_button(0):  # A键
@@ -224,7 +224,7 @@ class RobotArmController:
         theta_2 = temp1+theta_2-math.radians(120)
         theta_3 = (math.pi/2-(math.pi-theta_2-math.radians(120))+theta_3)-math.radians(70)
         
-        target_theta=[theta_1, -theta_2, theta_3]
+        target_theta=[theta_1+0.00005, -theta_2, theta_3]
         
         # 返回弧度制的计算结果
         return target_theta
