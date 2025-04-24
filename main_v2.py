@@ -409,7 +409,7 @@ class InputController:
                 # 计算目标速度（考虑方向）
                 target_speed = direction * self.keyboard_input.max_speed
                 # 平滑过渡到目标速度
-                self.keyboard_input.current_speeds[axis] += self.keyboard_input.smooth_factor * (target_speed - keyboard_input.current_speeds[axis])
+                self.keyboard_input.current_speeds[axis] += self.keyboard_input.smooth_factor * (target_speed - self.keyboard_input.current_speeds[axis])
         
         # 如果没有按键被按下，逐渐减速
         if not any_key_pressed:
@@ -468,7 +468,7 @@ class InputController:
         # 平滑：一阶低通滤波，或者说指数滑动平均方式更新角度
         for i in range(3):
             delta_angle = target_speeds[i]
-            pre_angles[i] = self.normalize_angle(pre_angles[i] + delta_angle * xbox_input.filter_alpha)
+            pre_angles[i] = self.normalize_angle(pre_angles[i] + delta_angle * self.xbox_input.filter_alpha)
 
         return pre_angles
 
