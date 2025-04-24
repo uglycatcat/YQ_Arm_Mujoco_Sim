@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 import glfw
 from draw_figure import draw_figure
+import math
 
 class RobotArmController:
     
@@ -187,7 +188,69 @@ class RobotArmController:
             transformed_pos.extend([x_2d, y_2d])
         
         return np.array(transformed_pos)
-
+    
+    # 在main函数中运行的负责逆解的函数。传入目标位置三维坐标，返回三个关节的逆解弧度制角度
+    def solve_ik_geometry(self,target_pos):
+        """逆解几何计算(单位弧度制)"""
+        
+        # 将得到的位置传递给三维坐标
+        target_3d_pos_x=target_pos[0]
+        target_3d_pos_y=target_pos[1]
+        target_3d_pos_z=target_pos[2]
+        
+        # 计算投影平面的法向量（Z轴和目标方向的叉积）
+        z_axis = np.array([0, 0, 1])
+        target_direction = np.array([target_3d_pos_x, target_3d_pos_y, target_3d_pos_z])
+        target_direction = target_direction / np.linalg.norm(target_direction)
+        plane_normal = np.cross(z_axis, target_direction)
+        plane_normal = plane_normal / np.linalg.norm(plane_normal)
+        
+        # 计算目标点在平面上的投影
+        point = np.array([target_3d_pos_x, target_3d_pos_y, target_3d_pos_z])
+        projection = point - np.dot(point, plane_normal) * plane_normal
+        
+        # 转换为二维坐标
+        target_2d_pos_x = np.sqrt(projection[0]**2 + projection[1]**2)
+        target_2d_pos_y = projection[2]
+        
+        # 处理X坐标符号（与原逻辑一致）
+        if np.dot(projection[:2], target_direction[:2]) < 0:
+            target_2d_pos_x = -target_2d_pos_x
+        
+        # 计算P4相对于P1点的偏移量
+        x_offset = (target_2d_pos_x - 0.078304) - 0.03419422 - 0.0162178
+        y_offset = (target_2d_pos_y - 0.0044872) - 0.05481078 - 0.136133
+        
+        # 计算P4P1的距离
+        distance = math.sqrt(x_offset**2 + y_offset**2)
+        
+        # P1P2和P3P4两段长度固定
+        arm_length_1=0.4000
+        arm_length_2=0.4000
+        
+        # 三边构成一个三角形
+        # 计算theta_2（arm_length_1和distance构成的角）
+        theta_2 = math.acos((arm_length_1**2 + distance**2 - arm_length_2**2) / (2 * arm_length_1 * distance))
+        # 计算theta_3（arm_length_1和arm_length_2构成的角）
+        theta_3 = math.acos((arm_length_1**2 + arm_length_2**2 - distance**2) / (2 * arm_length_1 * arm_length_2))
+        
+        # temp1得到P4P1两点的y/x的正切值对应的弧度制
+        temp1 = math.atan2(y_offset, x_offset)
+        
+        # 根据计算结果得到真正的theta_2和theta_3
+        theta_1 = -math.atan2(target_3d_pos_y, -target_3d_pos_x)
+        theta_2 = temp1+theta_2-math.radians(120)
+        theta_3 = (math.pi/2-(math.pi-theta_2-math.radians(120))+theta_3)-math.radians(70)
+        
+        target_theta=[theta_1, -theta_2, theta_3]
+        
+        # theta_2_d=math.degrees(theta_2)
+        # theta_3_d=math.degrees(theta_3)
+        # print(f"几何解2：{theta_2_d:.6f}")
+        # print(f"几何解3：{theta_3_d:.6f}")
+        # 返回弧度制的计算结果
+        return target_theta
+    
     def help(self):
         print("""
             =============================
@@ -211,6 +274,10 @@ class RobotArmController:
         """主循环"""
         last_update = time.time()
         print_counter = 0
+        # 存储封闭几何解
+        geometry_solution=None
+        # 存储数值解
+        numerical_solution=None
         print_time_interval = 20  # 每20次打印一次间隔时间
         print_matrix_interval = 3000 # 每100次打印一次矩阵
         has_input = False # 定义处理键盘是否有输入的变量
@@ -233,8 +300,13 @@ class RobotArmController:
             
             # 仅在有输入时执行IK
             if has_input:
+                # 几何解
+                geometry_solution = self.solve_ik_geometry(self.data.xpos[self.model.body("link6").id].copy())
+                # 数值解
                 res = self.solve_ik(current_pos, current_rot)
                 if res is not None and res.success:
+                    # 如果res正常，就把res的前三位传给numerical_solution
+                    numerical_solution = res.x[:3]
                     for i, joint_idx in enumerate(self.control_list):
                         self.data.qpos[joint_idx] = res.x[i]
                     
@@ -254,17 +326,31 @@ class RobotArmController:
             loop_end_time = time.time()
             print_counter += 1
             
-            # 有输入时打印控制循环耗时
-            if has_input and print_counter >= print_time_interval:
-                print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")    
+            # 打印解偏差
+            if print_counter>=30 and geometry_solution is not None and numerical_solution is not None:
+                geometry_degrees = [math.degrees(angle) for angle in geometry_solution]
+                numerical_degrees = [math.degrees(angle) for angle in numerical_solution]
+                geometry_degrees_str = [f"{angle:.6f}" for angle in geometry_degrees]
+                numerical_degrees_str = [f"{angle:.6f}" for angle in numerical_degrees]
+                print(f"几何解（角度）：{geometry_degrees_str}")
+                print(f"数值解（角度）：{numerical_degrees_str}")
+                qpos_0 = f"{math.degrees(self.data.qpos[0]):.6f}"
+                qpos_1 = f"{math.degrees(self.data.qpos[1]):.6f}"
+                qpos_4 = f"{math.degrees(self.data.qpos[4]):.6f}"
+                print(f"仿真角度：({qpos_0}, {qpos_1}, {qpos_4})")
                 print_counter = 0
-                # 最后一次判断has_input后置回标志位
-                has_input = False   
-            # 无输入时打印当前位置和姿态
-            if not has_input and print_counter >= print_matrix_interval:
-                print(f"当前位置: {current_pos}")
-                print(f"当前姿态: {current_rot.as_quat()}")      
-                print_counter = 0
+                
+            # # 有输入时打印控制循环耗时
+            # if has_input and print_counter >= print_time_interval:
+            #     print(f"控制循环耗时: {(loop_end_time - loop_start_time) * 1000:.2f}ms")    
+            #     print_counter = 0
+            #     # 最后一次判断has_input后置回标志位
+            #     has_input = False   
+            # # 无输入时打印当前位置和姿态
+            # if not has_input and print_counter >= print_matrix_interval:
+            #     print(f"当前位置: {current_pos}")
+            #     print(f"当前姿态: {current_rot.as_quat()}")    
+            #     print_counter = 0
              
         # 程序停止时关闭绘图线程
         draw_figure.stop()

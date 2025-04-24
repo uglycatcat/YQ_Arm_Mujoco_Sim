@@ -107,7 +107,7 @@ class DrawPointFigure:
             
         # 显示最后一个点的逆解角度
         last_point = self.point_data[-2:]  # 获取最后两个值作为坐标
-        theta_2, theta_3 = solve_ik_geometry(last_point)
+        theta_2, theta_3 = solve_ik_geometry_draw(last_point)
         text = f"IK Angles: θ2={np.degrees(theta_2):.2f}°, θ3={np.degrees(theta_3):.2f}°"
         text_surface = self.font.render(text, True, (0, 0, 0))
         self.screen.blit(text_surface, (10, text_y_offset))
@@ -156,7 +156,7 @@ class DrawPointFigure:
 # 全局实例
 draw_figure = DrawPointFigure()
 
-def solve_ik_geometry(target_pos):
+def solve_ik_geometry_draw(target_pos):
     """逆解几何计算(单位弧度制)"""
     
     # 计算P4相对于P1点的偏移量
@@ -180,8 +180,8 @@ def solve_ik_geometry(target_pos):
     temp1 = math.atan2(y_offset, x_offset)
     
     # 根据计算结果得到真正的theta_2和theta_3
-    theta_2+=temp1
-    theta_3=math.pi/2-(math.pi-theta_2)+theta_3
+    theta_2 = temp1+theta_2-math.radians(120)
+    theta_3 = (math.pi/2-(math.pi-theta_2-math.radians(120))+theta_3)-math.radians(70)
     
     # 返回弧度制的计算结果
     return theta_2, theta_3
