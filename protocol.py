@@ -61,6 +61,7 @@ class JointAngleProtocol:
         self.thread = None
         self.lock = Lock()
         self.seq = 0
+        self.command_id = 0x13  # 默认命令ID
         # 预分配缓冲区
         self.angles_buffer = bytearray(12)
         self.header_buffer = bytearray(8)
@@ -82,7 +83,20 @@ class JointAngleProtocol:
         for byte in data:
             crc = ((crc << 8) & 0xFF00) ^ table[((crc >> 8) ^ byte) & 0xFF]
         return crc & 0xFF, (crc >> 8) & 0xFF
-
+    
+    def change_mode(self, data):
+        """切换控制模式
+        
+        Args:
+            data (int): 模式值，范围0-20
+        """
+        if not isinstance(data, int) or data < 0 or data > 20:
+            raise ValueError("模式值必须在0-20之间")
+        
+        # 更新命令ID
+        self.command_id = data
+        print(f"已切换到模式{data}")
+        
     def start(self):
         """启动串口通信线程"""
         if not self.running.is_set():  # 避免重复启动
@@ -154,7 +168,7 @@ class JointAngleProtocol:
                 0x02,       # 控制字节
                 12,        # 数据长度
                 self.seq,   # 序号
-                0x13       # 命令ID
+                self.command_id  # 使用当前命令ID
             )
 
             # 组合数据并计算CRC
