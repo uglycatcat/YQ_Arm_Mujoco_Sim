@@ -148,8 +148,8 @@ def xbox_input():
     pygame.event.pump()
 
     # 初始化配置参数（只运行一次）
-    if not hasattr(xbox_input, 'max_speed',):
-        xbox_input.max_speed = 0.001  # 可调最大角速度（单位：弧度/帧）
+    if not hasattr(xbox_input, 'max_speed'):
+        xbox_input.max_speed = 0.002  # 可调最大角速度（单位：弧度/帧）
     if not hasattr(xbox_input, 'filter_alpha'):
         xbox_input.filter_alpha = 0.2  # 平滑因子 (0-1)，越小越平滑
 
@@ -182,6 +182,16 @@ def main():
     global joystick, is_keyboard
     pygame.init()
     pygame.joystick.init()
+    
+    # 检查手柄是否已连接
+    if pygame.joystick.get_count() > 0:
+        joystick = pygame.joystick.Joystick(0)
+        joystick.init()
+        print(f"手柄已连接：{joystick.get_name()}")
+        is_keyboard = False  # 如果手柄已连接，则从手柄开始接收数据
+    else:
+        print("未检测到手柄，默认使用键盘模式")
+        is_keyboard = True  # 如果没有手柄，则使用键盘
 
     clock = pygame.time.Clock()
     protocol.start()
