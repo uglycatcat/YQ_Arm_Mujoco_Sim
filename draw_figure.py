@@ -1,3 +1,6 @@
+# 本文件用于main_v2绘制机械臂平面图
+# 将逆解结果可视化
+
 import pygame
 import numpy as np
 from threading import Thread, Event, Lock
