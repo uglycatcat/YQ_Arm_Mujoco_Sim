@@ -71,7 +71,7 @@ class JointAngleProtocol:
         self.header_buffer = bytearray(8)
         self.packet_buffer = bytearray(22)
         # 采样值缓冲
-        self.sampling_buffer = None
+        self.sampling_buffer = np.empty((0, 3), dtype=np.uint16)
         # 尝试打开串口
         try:
             self.serial = serial.Serial(port, baudrate, timeout=0.1)
@@ -129,18 +129,18 @@ class JointAngleProtocol:
 
             # 提取中间的6个字节
             payload = data[2:8]
-
-            # 转换为角度值（每两个字节表示一个0-8191的编码器值）
-            angles = []
+            
+            # 每两个字节表示一个0-8191的编码器值
+            raw_value = []
             for i in range(0, len(payload), 2):
-                raw_value = int.from_bytes(payload[i:i+2], byteorder='little', signed=False)
-                angle = (raw_value / 8191.0) * (2 * np.pi)  # 将0-8191映射到0-2π
-                angles.append(angle)
+                val = int.from_bytes(payload[i:i+2], byteorder='big', signed=False)
+                raw_value.append(val)
 
-            # 更新关节角度,追加在采样缓冲区
-            self.sampling_buffer.append(angles)
-            # 发送结果
-            print(f"采样成功: {angles}")
+            # 转成 numpy 行向量并拼接
+            new_row = np.array(raw_value, dtype=np.uint16).reshape(1, -1)
+            self.sampling_buffer = np.vstack((self.sampling_buffer, new_row))
+
+            print(f"采样成功: {new_row}")
 
         except Exception as e:
             print(f"采样命令执行失败: {e}")
