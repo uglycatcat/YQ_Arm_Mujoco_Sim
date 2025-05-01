@@ -278,8 +278,9 @@ class RobotArmController:
             # 修改输入检测逻辑,同时传递目标位置
             if np.any(np.abs(trans) > 1e-5):
                 current_pos += trans
+                self.solve_ik(current_pos)
             
-            self.solve_ik(current_pos)
+            
             # 更新关节角度到串口协议
             protocol.update_angles([self.data.qpos[i] for i in self.control_list])
             
