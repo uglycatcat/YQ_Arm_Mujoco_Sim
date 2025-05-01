@@ -5,20 +5,22 @@
 # 本文件是相对于main.py的几何解优化版本
 # 计算复杂度由O（n*k）降低为O（1）
 # sudo /home/sunrise/miniconda3/envs/mujoco_env/bin/python main/main.py
-
+import numpy as np
 import mujoco as mj
 import mujoco_viewer
-import numpy as np
 import keyboard
-from scipy.spatial.transform import Rotation as R
-from scipy.optimize import minimize
-import time
-from pathlib import Path
 import glfw
 import math
 import pygame
-#引入自定义串口协议
+import time
+from scipy.spatial.transform import Rotation as R
+from pathlib import Path
+# 引入自定义串口协议
 from Protocol import protocol
+# 引入逆解相关运算
+from SolveIK import solveik
+# 引入控制器和控制模式
+from Controller import controller
 
 
 class RobotArmController:
@@ -33,7 +35,7 @@ class RobotArmController:
         # 执行一次前向动力学计算，初始化模型状态
         mj.mj_forward(self.model, self.data)
         # 打印帮助信息，显示控制器的使用说明
-        self.help()
+        controller.help()
         # 运动参数
         self.TRANS_STEP = 0.0001  # 平移步长 0.2cm（降低五倍）
         self.ROT_STEP = np.radians(0.05)  # 旋转步长 0.2度（降低五倍）
@@ -83,7 +85,7 @@ class RobotArmController:
             print("警告：奇异点检测，放弃此次 IK 计算！")
             return None
         
-        geometry_solution = self.solve_ik_geometry(target_pos)
+        geometry_solution = solveik.solve_ik_geometry(target_pos)
         if geometry_solution is None:
             return
         # 更新前三个关节（0,1,4）
@@ -171,82 +173,6 @@ class RobotArmController:
             trans = self.handle_joystick_input()
 
         return trans
-    
-    # 在main函数中运行的负责逆解的函数。传入目标位置三维坐标，返回三个关节的逆解弧度制角度
-    def solve_ik_geometry(self,target_pos):
-        """逆解几何计算(单位弧度制)"""
-        
-        # 将得到的位置传递给三维坐标
-        target_3d_pos_x=target_pos[0]
-        target_3d_pos_y=target_pos[1]
-        target_3d_pos_z=target_pos[2]
-        
-        # 计算投影平面的法向量（Z轴和目标方向的叉积）
-        z_axis = np.array([0, 0, 1])
-        target_direction = np.array([target_3d_pos_x, target_3d_pos_y, target_3d_pos_z])
-        target_direction = target_direction / np.linalg.norm(target_direction)
-        plane_normal = np.cross(z_axis, target_direction)
-        plane_normal = plane_normal / np.linalg.norm(plane_normal)
-        
-        # 计算目标点在平面上的投影
-        point = np.array([target_3d_pos_x, target_3d_pos_y, target_3d_pos_z])
-        projection = point - np.dot(point, plane_normal) * plane_normal
-        
-        # 转换为二维坐标
-        target_2d_pos_x = np.sqrt(projection[0]**2 + projection[1]**2)
-        target_2d_pos_y = projection[2]
-        
-        # 处理X坐标符号（与原逻辑一致）
-        if np.dot(projection[:2], target_direction[:2]) < 0:
-            target_2d_pos_x = -target_2d_pos_x
-        
-        # 计算P4相对于P1点的偏移量
-        x_offset = (target_2d_pos_x - 0.078304) - 0.03419422 - 0.0162178
-        y_offset = (target_2d_pos_y - 0.0044872) - 0.05481078 - 0.136133
-        
-        # 计算P4P1的距离
-        distance = math.sqrt(x_offset**2 + y_offset**2)
-        
-        # P1P2和P3P4两段长度固定
-        arm_length_1=0.4000
-        arm_length_2=0.4000
-        
-        # 三边构成一个三角形
-        if distance>arm_length_1+arm_length_2:
-            print("警告：目标点超出机械臂可到达范围！")
-            return None
-        # 计算theta_2（arm_length_1和distance构成的角）
-        theta_2 = math.acos((arm_length_1**2 + distance**2 - arm_length_2**2) / (2 * arm_length_1 * distance))
-        # 计算theta_3（arm_length_1和arm_length_2构成的角）
-        theta_3 = math.acos((arm_length_1**2 + arm_length_2**2 - distance**2) / (2 * arm_length_1 * arm_length_2))
-        
-        # temp1得到P4P1两点的y/x的正切值对应的弧度制
-        temp1 = math.atan2(y_offset, x_offset)
-        
-        # 根据计算结果得到真正的theta_2和theta_3
-        theta_1 = -math.atan2(target_3d_pos_y, -target_3d_pos_x)
-        theta_2 = temp1+theta_2-math.radians(120)
-        theta_3 = (math.pi/2-(math.pi-theta_2-math.radians(120))+theta_3)-math.radians(70)
-        
-        target_theta=[theta_1+0.00005, -theta_2, theta_3]
-        
-        # 返回弧度制的计算结果
-        return target_theta
-    
-    def help(self):
-        print("""
-            =============================
-            机械臂控制器 使用说明
-            =============================
-
-            [ 键盘模式 控制按键 ]
-            - 机械臂末端平移：
-            W / S : 前进 / 后退
-            A / D : 左移 / 右移
-            ↑ / ↓ : 上移 / 下移
-
-            请确保 MuJoCo 界面处于激活状态，否则键盘输入可能无效。
-            """)
 
     def run(self):
         """主循环"""
@@ -269,11 +195,12 @@ class RobotArmController:
 
             loop_start_time = time.time()
             
-            # 获取当前末端执行器的位置和姿态
+            # 获取当前末端执行器的位置
             current_pos = self.data.xpos[self.end_effector_id].copy()
             
             # 得到键盘输入
             trans= self.handle_keyboard_input()
+            trans= controller.update()
 
             # 修改输入检测逻辑,同时传递目标位置
             if np.any(np.abs(trans) > 1e-5):
@@ -316,6 +243,6 @@ if __name__ == "__main__":
     # 构建模型文件的完整路径，指向 scene.xml 文件
     model_path = str(model_dir / "scene.xml")
     # 创建 RobotArmController 实例，传入模型路径
-    controller = RobotArmController(model_path)
+    ArmMJCcontroller = RobotArmController(model_path)
     # 调用控制器的 run 方法，开始主循环
-    controller.run()
+    ArmMJCcontroller.run()
