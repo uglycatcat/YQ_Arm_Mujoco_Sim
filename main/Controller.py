@@ -187,6 +187,7 @@ class ArmController:
     def sampling_command(self):
         """采样命令"""
         self.command=1;
+        print("申请采样")
     
     def handle_xbox_input(self):
         """处理Xbox手柄输入"""

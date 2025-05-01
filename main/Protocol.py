@@ -70,7 +70,8 @@ class JointAngleProtocol:
         self.angles_buffer = bytearray(12)
         self.header_buffer = bytearray(8)
         self.packet_buffer = bytearray(22)
-        
+        # 采样值缓冲
+        self.sampling_buffer = None
         # 尝试打开串口
         try:
             self.serial = serial.Serial(port, baudrate)
@@ -101,7 +102,48 @@ class JointAngleProtocol:
     
     def sampling_command(self):
         """采样命令"""
+        # 备份当前命令ID
+        pre_command_id = self.command_id
+        # 设置采样命令ID
         self.command_id = 0x17
+        try:
+            # 开始采样
+            if not self.serial_enabled:
+                print("串口未启用，无法采样")
+                return
+
+            # 等待接收10个字节的数据包
+            data = self.serial.read(10)
+            if len(data) != 10:
+                print("接收到的数据长度不足10字节")
+                return
+
+            # 校验数据包格式
+            if data[:2] != b'\xAA\xAA' or data[-2:] != b'\xFF\xFF':
+                print("数据包头或尾校验失败")
+                return
+
+            # 提取中间的6个字节
+            payload = data[2:8]
+
+            # 转换为角度值（每两个字节表示一个0-8191的编码器值）
+            angles = []
+            for i in range(0, len(payload), 2):
+                raw_value = int.from_bytes(payload[i:i+2], byteorder='little', signed=False)
+                angle = (raw_value / 8191.0) * (2 * np.pi)  # 将0-8191映射到0-2π
+                angles.append(angle)
+
+            # 更新关节角度,追加在采样缓冲区
+            self.sampling_buffer.append(angles)
+
+        except Exception as e:
+            print(f"采样命令执行失败: {e}")
+
+        finally:
+            # 还原command_id
+            self.command_id = pre_command_id
+            print("采样成功")
+        
         
     def start(self):
         """启动串口通信线程"""

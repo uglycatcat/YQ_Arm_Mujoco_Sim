@@ -107,7 +107,7 @@ class RobotArmController:
             if current_control_mode != controller.control_mode: 
                 protocol.change_mode(controller.control_mode)
                 current_control_mode=controller.control_mode
-                
+            
             # 获取当前末端执行器的位置
             current_pos = self.data.xpos[self.end_effector_id].copy()
             
