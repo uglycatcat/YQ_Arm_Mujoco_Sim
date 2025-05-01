@@ -99,7 +99,7 @@ class JointAngleProtocol:
         
         # 更新命令ID
         self.command_id = data
-        print(f"已切换到模式{data}")
+        print(f"已切换控制模式为：{data}")
         
     def start(self):
         """启动串口通信线程"""
@@ -107,6 +107,7 @@ class JointAngleProtocol:
             self.running.set()
             self.thread = Thread(target=self._send_loop, daemon=True)
             self.thread.start()
+            print("串口线程已启动。")
 
     def stop(self):
         """停止串口通信"""
@@ -115,6 +116,7 @@ class JointAngleProtocol:
             self.thread.join(timeout=1.0)
         if self.serial and self.serial.is_open:
             self.serial.close()
+        print("串口线程已停止。")
 
     def update_angles(self, angles):
         """更新关节角度值"""
