@@ -4,6 +4,7 @@
 # 通过串口协议将信息传递给下位机
 # 本文件是相对于main.py的几何解优化版本
 # 计算复杂度由O（n*k）降低为O（1）
+# sudo /home/sunrise/miniconda3/envs/mujoco_env/bin/python main/main.py
 
 import mujoco as mj
 import mujoco_viewer
