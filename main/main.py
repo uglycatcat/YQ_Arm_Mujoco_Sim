@@ -1,6 +1,4 @@
-# 本文件由main.py文件修改而来
 # 目的是优化其中的机械臂逆解算法
-# 故本文件命名为V2版本
 # 本文件使用几何解逆解将得到的结果传给机械臂
 # 同时使用Xbox或者键盘接收信息
 # 通过串口协议将信息传递给下位机
@@ -19,7 +17,7 @@ import glfw
 import math
 import pygame
 #引入自定义串口协议
-from history.protocol import protocol
+from Protocol import protocol
 
 
 class RobotArmController:
