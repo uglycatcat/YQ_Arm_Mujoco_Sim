@@ -56,8 +56,8 @@ class JointAngleProtocol:
         0x6e17, 0x7e36, 0x4e55, 0x5e74, 0x2e93, 0x3eb2, 0x0ed1, 0x1ef0
     ]
     
-#COM5
-    def __init__(self, port="/dev/ttyUSB0", baudrate=115200):
+#/dev/ttyUSB0
+    def __init__(self, port="COM5", baudrate=115200):
         """初始化串口通信协议"""
         self.serial = None
         self.running = Event()
@@ -74,7 +74,7 @@ class JointAngleProtocol:
         self.sampling_buffer = None
         # 尝试打开串口
         try:
-            self.serial = serial.Serial(port, baudrate)
+            self.serial = serial.Serial(port, baudrate, timeout=0.1)
             self.serial_enabled = True
             print(f"成功连接到串口 {port}")
         except serial.SerialException as e:
@@ -108,14 +108,18 @@ class JointAngleProtocol:
         self.command_id = 0x17
         try:
             # 开始采样
-            if not self.serial_enabled:
+            if not self.serial or not self.serial.is_open:
                 print("串口未启用，无法采样")
                 return
-
-            # 等待接收10个字节的数据包
-            data = self.serial.read(10)
+            
+            # 串口访问加锁，避免与_send_loop冲突
+            with self.lock:
+                self.serial.reset_input_buffer()  # 清除残留数据
+                # 等待接收10个字节的数据包
+                data = self.serial.read(10)
+                
             if len(data) != 10:
-                print("接收到的数据长度不足10字节")
+                print(f"接收到的数据长度不足10字节: 实际={len(data)}")
                 return
 
             # 校验数据包格式
@@ -135,6 +139,8 @@ class JointAngleProtocol:
 
             # 更新关节角度,追加在采样缓冲区
             self.sampling_buffer.append(angles)
+            # 发送结果
+            print(f"采样成功: {angles}")
 
         except Exception as e:
             print(f"采样命令执行失败: {e}")
@@ -142,8 +148,6 @@ class JointAngleProtocol:
         finally:
             # 还原command_id
             self.command_id = pre_command_id
-            print("采样成功")
-        
         
     def start(self):
         """启动串口通信线程"""

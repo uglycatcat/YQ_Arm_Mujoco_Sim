@@ -78,6 +78,11 @@ class ArmController:
         """切换控制模式"""
         self.control_mode = mode
         
+    def sampling_command(self):
+        """采样命令"""
+        self.command=1;
+        print("申请采样")
+        
     def start(self):
         """启动控制器线程"""
         # 检测手柄连接状态
@@ -183,11 +188,6 @@ class ArmController:
             self._key_state['c'] = False
 
         return trans
-
-    def sampling_command(self):
-        """采样命令"""
-        self.command=1;
-        print("申请采样")
     
     def handle_xbox_input(self):
         """处理Xbox手柄输入"""
