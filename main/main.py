@@ -87,22 +87,35 @@ class RobotArmController:
         """主循环"""
         last_update = time.time()
         last_print_time = time.time()
+        # 初始化当前控制模式
+        current_control_mode = controller.control_mode
+        # 进入程序主循环
         while self.viewer.is_alive if self.viewer else True:
             
             # 输出控制循环耗时起点
             loop_start_time = time.time()
             
+            # 处理控制器线程的交互,得到当前控制器的输入
+            trans = controller.update_data()
+            
+            # 处理控制器线程的交互,处理当前是否有特殊命令（比如打点采样）
+            if controller.command==1: 
+                protocol.sampling_command()
+                controller.command=0;
+                
+            # 处理控制器线程的交互,处理当前是否发生了控制模式的变化
+            if current_control_mode != controller.control_mode: 
+                protocol.change_mode(controller.control_mode)
+                current_control_mode=controller.control_mode
+                
             # 获取当前末端执行器的位置
             current_pos = self.data.xpos[self.end_effector_id].copy()
             
-            # 得到输入
-            trans = controller.update_data()
-
-            # 修改输入检测逻辑,同时传递目标位置
+            # 仅在有输入的情况下进行逆解
             if np.any(np.abs(trans) > 1e-5):
                 current_pos += trans
                 self.solve_ik(current_pos)
-            
+
             # 更新关节角度到串口协议
             protocol.update_angles([self.data.qpos[i] for i in self.control_list])
             
@@ -115,7 +128,7 @@ class RobotArmController:
             loop_interval = time.time()-loop_start_time
             
             # 打印解偏差
-            if (time.time() - last_print_time) > 4:
+            if (time.time() - last_print_time) > 5:
                 qpos_0 = f"{math.degrees(self.data.qpos[0]):.6f}"
                 qpos_1 = f"{math.degrees(self.data.qpos[1]):.6f}"
                 qpos_4 = f"{math.degrees(self.data.qpos[4]):.6f}"

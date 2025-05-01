@@ -89,9 +89,7 @@ class JointAngleProtocol:
         return crc & 0xFF, (crc >> 8) & 0xFF
     
     def change_mode(self, data):
-        """切换控制模式
-        
-        Args:
+        """切换控制模式Args:
             data (int): 模式值，范围0-20
         """
         if not isinstance(data, int) or data < 0 or data > 20:
@@ -100,6 +98,10 @@ class JointAngleProtocol:
         # 更新命令ID
         self.command_id = data
         print(f"已切换控制模式为：{data}")
+    
+    def sampling_command(self):
+        """采样命令"""
+        self.command_id = 0x17
         
     def start(self):
         """启动串口通信线程"""

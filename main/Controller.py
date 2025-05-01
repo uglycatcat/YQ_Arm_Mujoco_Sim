@@ -14,18 +14,14 @@ from threading import Thread, Event, Lock
 class ArmController:
     def __init__(self):
         """初始化控制器"""
-        # 定义键盘控制字典（映射关系）
-        self.keyboard_dictionary=None
-        # 定义xbox手柄控制字典（映射关系）
-        self.xbox_dictionary=None
-        # 运动参数
-        self.TRANS_STEP = 0.0001  # 平移步长 1cm（降低五倍）
-        self.ROT_STEP = np.radians(0.05)  # 旋转步长 0.2度（降低五倍）
         # 添加手柄相关初始化
         pygame.init()
         pygame.joystick.init()
         self.joystick = None
+        # 当前控制器类型
         self.is_keyboard = True
+        # 特殊命令
+        self.command=0
         # 空格是否按下（用于切换模式）
         self.space_pressed = False
         # 手柄控制参数
@@ -38,7 +34,7 @@ class ArmController:
         # 控制模式参数(默认为13)
         self.control_mode=13
         # 控制数据（在update中的返回值）
-        self.trans_data=None
+        self.trans_data=np.zeros(3)
         # 控制器线程参数
         self.thread = None
         self.lock = Lock()
@@ -78,13 +74,23 @@ class ArmController:
         请确保 MuJoCo 界面处于激活状态，否则键盘输入可能无效。
         """)
         
-    def switch_mode(self, mode):
+    def change_mode(self, mode):
         """切换控制模式"""
         self.control_mode = mode
-        print(f"已切换控制模式为: {mode}")
         
     def start(self):
         """启动控制器线程"""
+        # 检测手柄连接状态
+        if pygame.joystick.get_count() > 0:
+            self.joystick = pygame.joystick.Joystick(0)
+            self.joystick.init()
+            self.is_keyboard = False
+            print(f"手柄已连接：{self.joystick.get_name()}，切换到手柄模式")
+        else:
+            self.is_keyboard = True
+            print("未检测到手柄，切换到键盘模式")
+
+        # 启动控制器线程
         if not self.running.is_set():
             self.running.set()
             self.thread = Thread(target=self._controller_loop, daemon=True)
@@ -139,16 +145,49 @@ class ArmController:
                 print("手柄未连接，无法切换到手柄模式")
                     
     def handle_keyboard_input(self):
-        """处理键盘输入"""
+        """处理键盘输入（并对 z/x/c 添加消抖）"""
         trans = np.zeros(3)
-        if keyboard.is_pressed('s'): trans[0] += self.TRANS_STEP
-        if keyboard.is_pressed('w'): trans[0] -= self.TRANS_STEP
-        if keyboard.is_pressed('d'): trans[1] += self.TRANS_STEP
-        if keyboard.is_pressed('a'): trans[1] -= self.TRANS_STEP
-        if keyboard.is_pressed('UP'): trans[2] += self.TRANS_STEP
-        if keyboard.is_pressed('DOWN'): trans[2] -= self.TRANS_STEP
+        if keyboard.is_pressed('s'): trans[0] += self.keyboard_max_speed
+        if keyboard.is_pressed('w'): trans[0] -= self.keyboard_max_speed
+        if keyboard.is_pressed('d'): trans[1] += self.keyboard_max_speed
+        if keyboard.is_pressed('a'): trans[1] -= self.keyboard_max_speed
+        if keyboard.is_pressed('UP'): trans[2] += self.keyboard_max_speed
+        if keyboard.is_pressed('DOWN'): trans[2] -= self.keyboard_max_speed
+
+        # 初始化按键状态记录（用于消抖）
+        if not hasattr(self, '_key_state'):
+            self._key_state = {'z': False, 'x': False, 'c': False}
+
+        # z 键：切换模式 13
+        if keyboard.is_pressed('z'):
+            if not self._key_state['z']:
+                self.change_mode(13)
+                self._key_state['z'] = True
+        else:
+            self._key_state['z'] = False
+
+        # x 键：切换模式 15
+        if keyboard.is_pressed('x'):
+            if not self._key_state['x']:
+                self.change_mode(15)
+                self._key_state['x'] = True
+        else:
+            self._key_state['x'] = False
+
+        # c 键：在模式15下采样命令
+        if keyboard.is_pressed('c'):
+            if not self._key_state['c'] and self.control_mode == 15:
+                self.sampling_command()
+                self._key_state['c'] = True
+        else:
+            self._key_state['c'] = False
+
         return trans
 
+    def sampling_command(self):
+        """采样命令"""
+        self.command=1;
+    
     def handle_xbox_input(self):
         """处理Xbox手柄输入"""
         if self.joystick is None:
@@ -161,9 +200,9 @@ class ArmController:
         right_y = -self.apply_deadzone(self.joystick.get_axis(3))
 
         if self.joystick.get_button(0):  # A键
-            self.switch_mode(15)
+            self.change_mode(15)
         if self.joystick.get_button(1):  # B键
-            self.switch_mode(13)
+            self.change_mode(13)
 
         return np.array([
             left_y * self.joystick_max_speed,
