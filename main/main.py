@@ -19,7 +19,7 @@ import glfw
 import math
 import pygame
 #引入自定义串口协议
-from protocol import protocol
+from history.protocol import protocol
 
 
 class RobotArmController:
@@ -43,8 +43,8 @@ class RobotArmController:
         # 启动串口通信协议
         protocol.start()
         # 初始化观察器
-        # self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=1200, height=800)
-        # glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
+        self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=1200, height=800)
+        glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
         
         print("当前键盘控制")
         
@@ -254,8 +254,7 @@ class RobotArmController:
         last_update = time.time()
         print_counter = 0
         
-        # while self.viewer.is_alive if self.viewer else True:
-        while True:
+        while self.viewer.is_alive if self.viewer else True:
             # 检查手柄连接状态
             current_joystick_count = pygame.joystick.get_count()
             if current_joystick_count > 0:
@@ -287,7 +286,7 @@ class RobotArmController:
             
             # 控制更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
-                  # self.viewer.render()
+                self.viewer.render()
                 last_update = time.time()
 
             # 输出控制循环耗时
@@ -320,209 +319,3 @@ if __name__ == "__main__":
     controller = RobotArmController(model_path)
     # 调用控制器的 run 方法，开始主循环
     controller.run()
-    
-    
-class InputController:
-    pre_angles = [0.0, 0.0, 0.0]  # 存储前三轴角度值
-    after_angles = [0.0, 0.0, 0.0] # 存储后三轴角度值
-    is_keyboard = True # 判断是否使用键盘输入
-    space_pressed = False # 判断是否按下空格键
-    joystick = None  # 全局手柄对象，只初始化一次
-
-    # 确保角度在0到2*pi之间
-    def normalize_angle(self,angle):
-        return angle % (2 * np.pi)
-
-    # 获取输入的角度值
-    # 获取device_input_angles()的长度为3的数组
-    # 获取cv_input_angles()的长度为3的数组
-    # 返回拼接后数组
-    def get_input_angless(self):
-        """获取输入的角度值"""
-        return self.device_input_angles() + self.cv_input_angles()  # 拼接输入角度
-
-    # 需要先检验是否成功连接键盘或者Xbox
-    # 获取通过键盘或者Xbox输入的角度值
-    # 并且根据键盘每按下"space"键，切换设备
-    # 返回长度为3的数组
-    def device_input_angles(self):
-        global pre_angles, is_keyboard, space_pressed
-        
-        # 检测手柄连接状态
-        if keyboard.is_pressed('space'):
-            if not space_pressed:
-                space_pressed = True
-                # 确保只有在手柄可用时才允许切换到手柄
-                if is_keyboard and joystick is None:
-                    print("无法切换到手柄模式，未检测到手柄。")
-                else:
-                    is_keyboard = not is_keyboard
-                    print("切换到{}模式".format("键盘" if is_keyboard else "手柄"))
-                    time.sleep(0.5)
-        else:
-            space_pressed = False
-        
-        if is_keyboard:
-            pre_angles = self.keyboard_input()
-        else:
-            pre_angles = self.xbox_input()
-        return pre_angles
-
-    # 检测 Xbox 手柄是否连接
-    def is_xbox_connected(self):
-        return pygame.joystick.get_count() > 0
-
-    # 获取通过CV解算出的角度值
-    # 返回长度为3的数组
-    # 每个轴的数据范围为0-2*pi四字节浮点数
-    # 初始值为0
-    def cv_input_angles(self):
-        after_angles = [0.0, 0.0, 0.0]
-        # 这里可以添加CV解算的逻辑
-        return after_angles  # 返回固定值作为占位
-
-    # 获取通过键盘输入的角度值
-    # 返回长度为3的数组
-    # 其中"a""d"控制第一轴，"w""s"控制第二轴，"q""e"控制第三轴
-    # 每个轴的数据范围为0-2*pi四字节浮点数
-    # 初始值为0
-    def keyboard_input(self):
-        global pre_angles  # 使用全局变量
-        
-        # 初始化参数
-        if not hasattr(self.keyboard_input, 'max_speed'):
-            self.keyboard_input.max_speed = 0.15
-        if not hasattr(self.xbox_input, 'smooth_factor'):
-            self.keyboard_input.smooth_factor = 0.002 #数值越高 越快抵达目标速度
-        if not hasattr(self.xbox_input, 'current_speeds'):
-            self.keyboard_input.current_speeds = [0.0, 0.0, 0.0]  # 每个轴的当前速度
-        
-        # 定义按键与轴和方向的映射
-        key_actions = {
-            'a': (0, 1),    # 轴0，正向
-            'd': (0, -1),   # 轴0，负向
-            'w': (1, 1),    # 轴1，正向
-            's': (1, -1),   # 轴1，负向
-            'q': (2, 1),    # 轴2，正向
-            'e': (2, -1)    # 轴2，负向
-        }
-        
-        # 检查每个按键并更新速度
-        any_key_pressed = False
-        for key, (axis, direction) in key_actions.items():
-            if keyboard.is_pressed(key):
-                any_key_pressed = True
-                # 计算目标速度（考虑方向）
-                target_speed = direction * self.keyboard_input.max_speed
-                # 平滑过渡到目标速度
-                self.keyboard_input.current_speeds[axis] += self.keyboard_input.smooth_factor * (target_speed - self.keyboard_input.current_speeds[axis])
-        
-        # 如果没有按键被按下，逐渐减速
-        if not any_key_pressed:
-            for i in range(3):
-                if abs(self.keyboard_input.current_speeds[i]) > 0.0001:  # 小阈值防止抖动
-                    self.keyboard_input.current_speeds[i] *= (1 - self.keyboard_input.smooth_factor)
-                else:
-                    self.keyboard_input.current_speeds[i] = 0.0
-        
-        # 应用速度更新角度（确保速度不超过最大速度）
-        for i in range(3):
-            # 限制速度范围（正负方向）
-            self.keyboard_input.current_speeds[i] = max(-self.keyboard_input.max_speed, 
-                                                min(self.keyboard_input.max_speed, 
-                                                    self.keyboard_input.current_speeds[i]))
-            pre_angles[i] = self.normalize_angle(pre_angles[i] + self.keyboard_input.current_speeds[i])
-        
-        # 控制最大速度
-        if keyboard.is_pressed('z') and self.keyboard_input.max_speed < 0.3:
-            self.keyboard_input.max_speed = min(self.keyboard_input.max_speed + 0.05, 0.3)
-            time.sleep(0.1)
-        if keyboard.is_pressed('x') and self.keyboard_input.max_speed > 0.05:
-            self.keyboard_input.max_speed = max(self.keyboard_input.max_speed - 0.05, 0.05)
-            time.sleep(0.1)
-        
-        return pre_angles
-
-    # 获取通过Xbox输入的角度值
-    # 返回长度为3的数组
-    # 其中左摇杆横轴表示第一轴，左摇杆纵轴表示第二轴，右摇杆纵轴表示第三轴
-    # 每个轴的数据范围为0-2*pi四字节浮点数
-    # 初始值为0
-    def xbox_input(self):
-        global pre_angles, joystick
-
-        pygame.event.pump()
-
-        # 初始化配置参数（只运行一次）
-        if not hasattr(self.xbox_input, 'max_speed',):
-            self.xbox_input.max_speed = 0.001  # 可调最大角速度（单位：弧度/帧）
-        if not hasattr(self.xbox_input, 'filter_alpha'):
-            self.xbox_input.filter_alpha = 0.2  # 平滑因子 (0-1)，越小越平滑
-
-        # 读取摇杆输入，范围 -1 到 1
-        left_x = self.apply_deadzone(joystick.get_axis(0))
-        left_y = self.apply_deadzone(joystick.get_axis(1))
-        right_y = self.apply_deadzone(joystick.get_axis(3))
-
-        # 把摇杆值乘以最大角速度，得到目标速度
-        target_speeds = [
-            left_x * self.xbox_input.max_speed,
-            left_y * self.xbox_input.max_speed,
-            right_y * self.xbox_input.max_speed
-        ]
-
-        # 平滑：一阶低通滤波，或者说指数滑动平均方式更新角度
-        for i in range(3):
-            delta_angle = target_speeds[i]
-            pre_angles[i] = self.normalize_angle(pre_angles[i] + delta_angle * self.xbox_input.filter_alpha)
-
-        return pre_angles
-
-    def apply_deadzone(self,value, deadzone=0.1):
-        """摇杆死区处理"""
-        if abs(value) < deadzone:
-            return 0
-        return value
-
-    def __init__(self):
-        global joystick, is_keyboard
-        pygame.init()
-        pygame.joystick.init()
-
-        clock = pygame.time.Clock()
-        protocol.start()
-
-        count = 0
-
-        try:
-            while True:
-                # 检测手柄连接状态是否变化
-                current_joystick_count = pygame.joystick.get_count()
-                if current_joystick_count > 0:
-                    if joystick is None:
-                        # 如果之前未连接，现在连接了，就初始化
-                        joystick = pygame.joystick.Joystick(0)
-                        joystick.init()
-                        print(f"手柄已连接：{joystick.get_name()}")
-                else:
-                    if joystick is not None:
-                        # 如果之前有连接，现在断开了，就清空
-                        print("手柄已断开，自动切换到键盘模式")
-                        joystick = None
-                        is_keyboard = True
-
-                input_angles = self.get_input_angles()
-                protocol.update_angles(input_angles)
-
-                if count % 1000 == 0:
-                    print(input_angles)
-                count += 1
-
-                # 1000Hz
-                time.sleep(0.001)
-                clock.tick(1000)
-        except KeyboardInterrupt:
-            print("程序中断，正在停止...")
-        finally:
-            protocol.stop()
-            pygame.quit()
