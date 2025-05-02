@@ -18,6 +18,8 @@ from Protocol import protocol
 from SolveIK import solveik
 # 引入控制器和控制模式
 from Controller import controller
+# 引入轨迹控制的相关函数
+from Trajectory import trajectory
 
 class RobotArmController:
     
@@ -85,6 +87,9 @@ class RobotArmController:
 
     def run(self):
         """主循环"""
+        # 计算轨迹
+        All_Trajectory=trajectory.bezier_interpolation()
+        # 记录程序运行时间
         last_update = time.time()
         last_print_time = time.time()
         # 初始化当前控制模式
@@ -92,6 +97,8 @@ class RobotArmController:
         # 进入程序主循环
         while self.viewer.is_alive if self.viewer else True:
             
+            # 用于轨迹补点
+            i=0
             # 输出控制循环耗时起点
             loop_start_time = time.time()
             
@@ -106,19 +113,49 @@ class RobotArmController:
             # 处理控制器线程的交互,处理当前是否发生了控制模式的变化
             if current_control_mode != controller.update_mode(): 
                 current_control_mode=controller.update_mode()
-                protocol.change_mode(current_control_mode)
+                protocol.change_mode(current_control_mode)    
+            
+            # 根据控制模式判断当前任务
+            if current_control_mode==13:
+                """前三轴逆解控制模式"""
+                # 获取当前末端执行器的位置
+                current_pos = self.data.xpos[self.end_effector_id].copy()
                 
-            # 获取当前末端执行器的位置
-            current_pos = self.data.xpos[self.end_effector_id].copy()
-            
-            # 仅在有输入的情况下进行逆解
-            if np.any(np.abs(trans) > 1e-5):
-                current_pos += trans
-                self.solve_ik(current_pos)
+                # 仅在有输入的情况下进行逆解
+                if np.any(np.abs(trans) > 1e-5):
+                    current_pos += trans
+                    self.solve_ik(current_pos)
 
-            # 更新关节角度到串口协议
-            protocol.update_angles([self.data.qpos[i] for i in self.control_list])
-            
+                # 更新关节角度到串口协议
+                protocol.update_angles([self.data.qpos[i] for i in self.control_list])
+            else:
+                """轨迹控制模式"""
+                print("插补点数:", All_Trajectory.shape[0])
+                
+                while(i<All_Trajectory.shape[0]):
+                    # 取出当前插补点的关节角
+                    theta_1, theta_2, theta_3 = All_Trajectory[i]
+                    # 更新前三个关节（0,1,4）
+                    self.data.qpos[0] = theta_1
+                    self.data.qpos[1] = theta_2
+                    self.data.qpos[4] = theta_3
+                    self.data.qpos[2] = self.data.qpos[1]
+                    self.data.qpos[3] = self.data.qpos[1]
+                    self.data.qpos[5] = self.data.qpos[4]  # 根据实际机械结构调整
+                    self.data.qpos[6] = -self.data.qpos[5]
+                    # 保持最后三个关节为0
+                    self.data.qpos[7] = 0
+                    self.data.qpos[8] = 0
+                    self.data.qpos[9] = 0
+                    # 执行前向动力学计算
+                    mj.mj_forward(self.model, self.data)
+                    mj.mj_step(self.model, self.data)
+                    # 短暂延时
+                    time.sleep(0.05)
+                    self.viewer.render()
+                    # 移动序号
+                    i+=1
+                
             # 控制渲染更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
                 self.viewer.render()
