@@ -18,6 +18,8 @@ import struct
 import time
 from threading import Thread, Event, Lock
 import numpy as np
+# 引入机械臂轨迹规划的实例
+from Trajectory import trajectory
 
 class JointAngleProtocol:
     # CRC16 查表法的表
@@ -70,8 +72,6 @@ class JointAngleProtocol:
         self.angles_buffer = bytearray(12)
         self.header_buffer = bytearray(8)
         self.packet_buffer = bytearray(22)
-        # 采样值缓冲
-        self.sampling_buffer = np.empty((0, 3), dtype=np.uint16)
         # 尝试打开串口
         try:
             self.serial = serial.Serial(port, baudrate, timeout=0.1)
@@ -130,17 +130,17 @@ class JointAngleProtocol:
             # 提取中间的6个字节
             payload = data[2:8]
             
-            # 每两个字节表示一个0-8191的编码器值
-            raw_value = []
-            for i in range(0, len(payload), 2):
-                val = int.from_bytes(payload[i:i+2], byteorder='big', signed=False)
-                raw_value.append(val)
+            # 每两个字节表示一个0-8191的编码器值,并将编码器值转换为弧度制
+            val1 = self._convert_uint16_to_angle(int.from_bytes(payload[0:2], byteorder='big', signed=False)-5100)
+            val2 = self._convert_uint16_to_angle(5600-int.from_bytes(payload[2:4], byteorder='big', signed=False))
+            val3 = self._convert_uint16_to_angle(int.from_bytes(payload[4:6], byteorder='big', signed=False)-6700)
+            raw_value=[val1,val2,val3]
 
             # 转成 numpy 行向量并拼接
-            new_row = np.array(raw_value, dtype=np.uint16).reshape(1, -1)
-            self.sampling_buffer = np.vstack((self.sampling_buffer, new_row))
+            new_row = np.array(raw_value, dtype=np.float32).reshape(1, -1)
+            trajectory.sampling_buffer = np.vstack((trajectory.sampling_buffer, new_row))
 
-            print(f"采样成功: {new_row}")
+            print(f"采样成功: {raw_value}")
 
         except Exception as e:
             print(f"采样命令执行失败: {e}")
@@ -175,6 +175,14 @@ class JointAngleProtocol:
     def _convert_angle_to_uint16(angle):
         """优化的角度转换"""
         return min(8191, int((angle % (2 * np.pi)) * 1303.8344))  # 8191/(2*pi) ≈ 1303.8344
+    
+    @staticmethod
+    def _convert_uint16_to_angle(uint16):
+        """将 uint16 (0~8191) 转换回弧度值"""
+        if uint16>8191: uint16-=8191
+        if uint16<0: uint16+=8191
+        uint16 = min(8191, max(0, uint16))  # 强制限制到 0~8191
+        return uint16 / 1303.8344
 
     def _send_loop(self):
         """优化的发送循环"""

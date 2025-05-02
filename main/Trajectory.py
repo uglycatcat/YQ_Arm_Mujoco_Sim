@@ -1,13 +1,12 @@
 import numpy as np
-import keyboard
-import time
 import math
-from scipy.spatial.transform import Rotation as R
 
-class InterpolationMethod:
+class ArmMotionTrajectory:
+    
     def __init__(self):
         self.pre_data_length =5
-        self.after_data_length =20
+        self.processed_data_length =20
+        self.sampling_buffer=np.empty((0, 3), dtype=np.float32)
         
     def linear_interpolation(self):
 
@@ -16,13 +15,15 @@ class InterpolationMethod:
     def bessel_interpolation(self):
         pass
         
-    def add_data():
+    def add_data(self):
         pass
         
-    def delete_data():
+    def delete_data(self):
         pass
         
-    def change_data():
+    def change_data(self):
         pass
         
         return None
+    
+trajectory = ArmMotionTrajectory()
