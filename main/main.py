@@ -105,9 +105,9 @@ class RobotArmController:
                 
             # 处理控制器线程的交互,处理当前是否发生了控制模式的变化
             if current_control_mode != controller.update_mode(): 
-                protocol.change_mode(controller.update_mode())
                 current_control_mode=controller.update_mode()
-            
+                protocol.change_mode(current_control_mode)
+                
             # 获取当前末端执行器的位置
             current_pos = self.data.xpos[self.end_effector_id].copy()
             

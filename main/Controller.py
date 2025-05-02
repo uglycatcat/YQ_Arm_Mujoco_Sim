@@ -240,5 +240,4 @@ class ArmController:
             return 0
         return value
     
-    
 controller=ArmController()
