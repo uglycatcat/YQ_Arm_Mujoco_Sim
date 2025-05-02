@@ -138,7 +138,7 @@ class JointAngleProtocol:
 
             # 转成 numpy 行向量并拼接
             new_row = np.array(raw_value, dtype=np.float32).reshape(1, -1)
-            trajectory.sampling_buffer = np.vstack((trajectory.sampling_buffer, new_row))
+            trajectory.sampling_encoder_buffer = np.vstack((trajectory.sampling_encoder_buffer, new_row))
 
             print(f"采样成功: {raw_value}")
 
