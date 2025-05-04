@@ -88,7 +88,8 @@ class RobotArmController:
     def run(self):
         """主循环"""
         # 计算轨迹
-        All_Trajectory=trajectory.smooth_global_interpolation()
+        trajectory1=trajectory.linear_interpolation()
+        Trajectory2=trajectory.smooth_global_interpolation()
         # 记录程序运行时间
         last_update = time.time()
         last_print_time = time.time()
@@ -130,11 +131,11 @@ class RobotArmController:
                 protocol.update_angles([self.data.qpos[i] for i in self.control_list])
             else:
                 """轨迹控制模式"""
-                print("插补点数:", All_Trajectory.shape[0])
+                print("插补点数:", Trajectory2.shape[0])
                 
-                while(i<All_Trajectory.shape[0]):
+                while(i<Trajectory2.shape[0]):
                     # 取出当前插补点的关节角
-                    theta_1, theta_2, theta_3 = All_Trajectory[i]
+                    theta_1, theta_2, theta_3 = Trajectory2[i]
                     # 更新前三个关节（0,1,4）
                     self.data.qpos[0] = theta_1
                     self.data.qpos[1] = theta_2

@@ -86,6 +86,11 @@ class ArmMotionTrajectory:
         interval_time = 0.02  # 插补时间间隔 (s)
         positions = self.sampling_mjc_pos_buffer  # 控制点，N x 3
         
+        # 边界条件控制
+        if len(positions)<3:
+            print("样条曲线插值至少需要三个点")
+            return
+        
         # 存储计算开始时的时间
         compute_start_time = time.time()
         
