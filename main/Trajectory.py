@@ -21,32 +21,51 @@ class ArmMotionTrajectory:
             np.array([-0.0541014, 0.30229002, 0.41897613], dtype=np.float32).reshape(1, -1),
             np.array([0.30646222, 0.15732615, 0.25583029], dtype=np.float32).reshape(1, -1)
         ))
-        # 设置插补参数
-        self.interpolation_step = 0.01  # 插补步长 (单位: m)
         
     def linear_interpolation(self):
-        """线性插补，对每两个控制点之间进行直线插补"""
-        # 存储计算开始时的时间
-        compute_start_time=time.time()
+        """基于五次多项式的轨迹规划，控制起止速度/加速度为0，并按等时间间隔进行插补"""
+        # 参数定义
+        v_max = 0.12      # 最大速度 (m/s)
+        a_max = 0.15      # 最大加速度 (m/s^2)
+        interval_time = 0.02  # 插补时间间隔 (s)
         
-        # 存储最终插补后的所有点
-        interpolated_points = np.empty((0, 3), dtype=np.float32)
+        # 插补点总数与参数关系markdown表达式
+        # \[
+        # N = \left\lceil \frac{1}{\text{interval\_time}} \cdot \max\left( \frac{15D}{8v_{\text{max}}}, \sqrt{\frac{10D}{a_{\text{max}}}} \right) \right\rceil + 1
+        # \]
+        
+        # 存储计算开始时的时间
+        compute_start_time = time.time()
+        interpolated_points = []
         
         # 遍历每两个相邻的控制点
         for i in range(len(self.sampling_mjc_pos_buffer) - 1):
-            start_point = self.sampling_mjc_pos_buffer[i]
-            end_point = self.sampling_mjc_pos_buffer[i + 1]
+            p0 = self.sampling_mjc_pos_buffer[i]
+            p1 = self.sampling_mjc_pos_buffer[i + 1]
+            distance = euclidean(p0, p1)
             
-            # 计算两点间距离
-            distance = euclidean(start_point, end_point)
+            # 初步估计时间（保守估计）
+            # T 满足最大速度和加速度的限制
+            T_v = 15 * distance / (8 * v_max)
+            T_a = np.sqrt(10 * distance / a_max)
+            T = max(T_v, T_a)
             
-            # 计算需要插补的点数 (至少插补1个点)
-            num_points = max(2, int(distance / self.interpolation_step) + 1)
+            # 构造时间序列
+            t_array = np.arange(0, T, interval_time)
+            if t_array[-1] < T:
+                t_array = np.append(t_array, T)
             
-            # 在两个点之间进行线性插补
-            for t in np.linspace(0, 1, num_points):
-                interpolated_point = start_point + t * (end_point - start_point)
-                interpolated_points = np.vstack((interpolated_points, interpolated_point))
+            # 分别对x, y, z计算系数
+            coeffs = [self.compute_coeffs(p0[j], p1[j], T) for j in range(3)]
+            
+            
+            # 生成插补点
+            for t in t_array:
+                point = np.array([
+                    sum(c * t**n for n, c in enumerate(coeffs[dim]))
+                    for dim in range(3)
+                ])
+                interpolated_points.append(point)
         
         # 对每个插补点进行逆解计算
         trajectory_ik_angle = []
@@ -60,6 +79,10 @@ class ArmMotionTrajectory:
     
     def bezier_interpolation(self):
         """贝塞尔曲线插补，根据每4个控制点生成一段三阶贝塞尔曲线"""
+       
+        # 插补步长 (单位: m)
+        interpolation_step = 0.01  
+        
         compute_start_time = time.time()
         points = self.sampling_mjc_pos_buffer
         interpolated_points = np.empty((0, 3), dtype=np.float32)
@@ -76,7 +99,7 @@ class ArmMotionTrajectory:
 
             # 插补点数根据估算长度决定
             chord_length = euclidean(P0, P3)
-            num_points = max(2, int(chord_length / self.interpolation_step) + 1)
+            num_points = max(2, int(chord_length / interpolation_step) + 1)
 
             for t in np.linspace(0, 1, num_points):
                 B_t = ((1 - t) ** 3) * P0 + \
@@ -95,7 +118,17 @@ class ArmMotionTrajectory:
 
         print(f"贝塞尔插补计算耗时 {(time.time() - compute_start_time) * 1000:.4f}ms")
         return np.array(trajectory_ik_angle)
-        
+    
+    def compute_coeffs(self,p_start, p_end, T):
+        # 起止点速度、加速度均为0
+        a0 = p_start
+        a1 = 0
+        a2 = 0
+        a3 = (10 * (p_end - p_start)) / T**3
+        a4 = (-15 * (p_end - p_start)) / T**4
+        a5 = (6 * (p_end - p_start)) / T**5
+        return a0, a1, a2, a3, a4, a5
+    
     def add_data(self):
         
         pass

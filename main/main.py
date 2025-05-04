@@ -88,7 +88,7 @@ class RobotArmController:
     def run(self):
         """主循环"""
         # 计算轨迹
-        All_Trajectory=trajectory.bezier_interpolation()
+        All_Trajectory=trajectory.linear_interpolation()
         # 记录程序运行时间
         last_update = time.time()
         last_print_time = time.time()
@@ -151,7 +151,7 @@ class RobotArmController:
                     mj.mj_forward(self.model, self.data)
                     mj.mj_step(self.model, self.data)
                     # 短暂延时
-                    time.sleep(0.05)
+                    time.sleep(0.02)
                     self.viewer.render()
                     # 移动序号
                     i+=1
