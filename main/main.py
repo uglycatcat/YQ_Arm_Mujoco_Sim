@@ -84,7 +84,20 @@ class RobotArmController:
         mj.mj_forward(self.model, self.data)
         mj.mj_step(self.model, self.data)
         return geometry_solution
+    
+    def sampling_command(self):
 
+        val1 = self.data.qpos[0]
+        val2 = self.data.qpos[1]
+        val3 = self.data.qpos[4]
+        raw_value=[val1,val2,val3]
+
+        # 转成 numpy 行向量并拼接
+        new_row = np.array(raw_value).reshape(1, -1)
+        trajectory.sampling_encoder_buffer = np.vstack((trajectory.sampling_encoder_buffer, new_row))
+
+        print(f"采样成功: {raw_value}")        
+        
     def run(self):
         """主循环"""
         # 计算轨迹
@@ -109,6 +122,9 @@ class RobotArmController:
             # 处理控制器线程的交互,处理当前是否有特殊命令（比如打点采样）
             if controller.command==1: 
                 protocol.sampling_command()
+                controller.command=0;
+            if controller.command==2: 
+                self.sampling_command()
                 controller.command=0;
                 
             # 处理控制器线程的交互,处理当前是否发生了控制模式的变化

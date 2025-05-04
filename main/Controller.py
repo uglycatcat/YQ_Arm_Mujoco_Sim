@@ -78,9 +78,12 @@ class ArmController:
         """切换控制模式"""
         self.control_mode = mode
         
-    def sampling_command(self):
+    def sampling_command(self,method):
         """采样命令"""
-        self.command=1;
+        if method==1:
+            self.command=1;
+        if method==2:
+            self.command=2;
         print("申请采样")
         
     def start(self):
@@ -161,7 +164,7 @@ class ArmController:
 
         # 初始化按键状态记录（用于消抖）
         if not hasattr(self, '_key_state'):
-            self._key_state = {'z': False, 'x': False, 'c': False}
+            self._key_state = {'z': False, 'x': False, 'c': False, 'v': False}
 
         # z 键：切换模式 13
         if keyboard.is_pressed('z'):
@@ -179,13 +182,21 @@ class ArmController:
         else:
             self._key_state['x'] = False
 
-        # c 键：在模式15下采样命令
+        # c 键：在模式15下执行外部采样命令
         if keyboard.is_pressed('c'):
             if not self._key_state['c'] and self.control_mode == 15:
-                self.sampling_command()
+                self.sampling_command(1)
                 self._key_state['c'] = True
         else:
             self._key_state['c'] = False
+        
+        # c 键：在模式15下执行内部采样命令
+        if keyboard.is_pressed('v'):
+            if not self._key_state['v'] and self.control_mode == 15:
+                self.sampling_command(2)
+                self._key_state['v'] = True
+        else:
+            self._key_state['v'] = False
 
         return trans
     
