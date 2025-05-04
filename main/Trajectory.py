@@ -3,6 +3,7 @@ import math
 import time
 from SolveIK import solveik
 from scipy.spatial.distance import euclidean  # 用于计算两点间距离
+from scipy.interpolate import make_interp_spline # 用于计算样条曲线
 
 class ArmMotionTrajectory:
     
@@ -77,46 +78,58 @@ class ArmMotionTrajectory:
         print(f"直线插补计算耗时{(time.time()-compute_start_time)*1000:.4f}ms")
         return np.array(trajectory_ik_angle)
     
-    def bezier_interpolation(self):
-        """贝塞尔曲线插补，根据每4个控制点生成一段三阶贝塞尔曲线"""
-       
-        # 插补步长 (单位: m)
-        interpolation_step = 0.01  
+    def smooth_global_interpolation(self):
+        """五次样条轨迹插值,曲线通过所有控制点,整体路径二阶可导（连续加速度）"""
+        # 参数定义
+        v_max = 0.12      # 最大速度 (m/s)
+        a_max = 0.15      # 最大加速度 (m/s^2)
+        interval_time = 0.02  # 插补时间间隔 (s)
+        positions = self.sampling_mjc_pos_buffer  # 控制点，N x 3
         
+        # 存储计算开始时的时间
         compute_start_time = time.time()
-        points = self.sampling_mjc_pos_buffer
-        interpolated_points = np.empty((0, 3), dtype=np.float32)
+        
+        # 计算每一段距离与时间
+        segment_times = []
+        for i in range(len(positions) - 1):
+            d = euclidean(positions[i], positions[i+1])
+            T_v = 15 * d / (8 * v_max)
+            T_a = np.sqrt(10 * d / a_max)
+            T = max(T_v, T_a)
+            segment_times.append(T)
+            
+        # 构造累计时间戳
+        time_stamps = [0]
+        for T in segment_times:
+            time_stamps.append(time_stamps[-1] + T)
+        time_stamps = np.array(time_stamps)
+        
+        # 构造样条（使用 make_interp_spline, k=5 表示五次）
+        positions = np.array(positions)
+        spline_x = make_interp_spline(time_stamps, positions[:,0], k=5, bc_type=([ (1, 0.0), (2, 0.0) ], [ (1, 0.0), (2, 0.0) ]))
+        spline_y = make_interp_spline(time_stamps, positions[:,1], k=5, bc_type=([ (1, 0.0), (2, 0.0) ], [ (1, 0.0), (2, 0.0) ]))
+        spline_z = make_interp_spline(time_stamps, positions[:,2], k=5, bc_type=([ (1, 0.0), (2, 0.0) ], [ (1, 0.0), (2, 0.0) ]))
+        
+        # 构造插值时间序列
+        total_time = time_stamps[-1]
+        t_array = np.arange(0, total_time, interval_time)
+        if t_array[-1] < total_time:
+            t_array = np.append(t_array, total_time)
 
-        # 至少需要4个控制点
-        if len(points) < 4:
-            print("控制点不足，贝塞尔插补至少需要4个点")
-            return None
-
-        # 每4个点生成一段曲线，步长决定插值点数
-        for i in range(0, len(points) - 3, 3):  # 可用滑窗推进，避免断裂
-            P0, P1, P2, P3 = points[i], points[i + 1], points[i + 2], points[i + 3]
-            curve = []
-
-            # 插补点数根据估算长度决定
-            chord_length = euclidean(P0, P3)
-            num_points = max(2, int(chord_length / interpolation_step) + 1)
-
-            for t in np.linspace(0, 1, num_points):
-                B_t = ((1 - t) ** 3) * P0 + \
-                    3 * ((1 - t) ** 2) * t * P1 + \
-                    3 * (1 - t) * (t ** 2) * P2 + \
-                    (t ** 3) * P3
-                curve.append(B_t)
-
-            interpolated_points = np.vstack((interpolated_points, curve))
-
+        # 插值计算
+        interpolated_points = np.stack([
+            spline_x(t_array),
+            spline_y(t_array),
+            spline_z(t_array)
+        ], axis=1)
+        
         # 对每个插补点进行逆解计算
         trajectory_ik_angle = []
         for point in interpolated_points:
             angle = solveik.solve_ik_geometry(point)
             trajectory_ik_angle.append(angle)
 
-        print(f"贝塞尔插补计算耗时 {(time.time() - compute_start_time) * 1000:.4f}ms")
+        print(f"五次样条计算耗时 {(time.time() - compute_start_time) * 1000:.4f}ms")
         return np.array(trajectory_ik_angle)
     
     def compute_coeffs(self,p_start, p_end, T):
