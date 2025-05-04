@@ -96,7 +96,7 @@ class RobotArmController:
         new_row = np.array(raw_value).reshape(1, -1)
         trajectory.sampling_encoder_buffer = np.vstack((trajectory.sampling_encoder_buffer, new_row))
 
-        print(f"采样成功: {raw_value}")        
+        print(f"内部采样成功: {raw_value}")        
         
     def run(self):
         """主循环"""
