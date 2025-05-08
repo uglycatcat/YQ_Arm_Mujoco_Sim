@@ -1,3 +1,4 @@
+# 用于ESP32与RDK X3(Ubuntu)进行TCP通信的TCP服务端守护线程
 import signal
 import sys
 import socket
