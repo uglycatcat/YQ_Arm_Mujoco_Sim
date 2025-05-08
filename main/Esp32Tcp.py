@@ -53,7 +53,7 @@ class Esp32Communication():
         while not self._stop_event.is_set():
             try:
                 # 接受新连接（带超时检测）
-                self.sock.settimeout(1)  # 每秒检测一次停止标志
+                self.sock.settimeout(10)  # 每秒检测一次停止标志
                 print("[TCP服务端] 等待设备连接...")
                 self.conn, self.addr = self.sock.accept()
             except socket.timeout:
@@ -115,14 +115,19 @@ esp32tcpcom = Esp32Communication()
 
 # 测试用
 if __name__ == "__main__":
-    # 启动服务
+    
+    # 优雅退出处理
+    def graceful_exit(signum, frame):
+        print("\n收到退出信号，正在清理...")
+        esp32tcpcom.stop()
+        sys.exit(0)
+    
+    signal.signal(signal.SIGINT, graceful_exit)  # 处理Ctrl+C
+    signal.signal(signal.SIGTERM, graceful_exit) # 处理kill命令
+
+    # 启动服务并保持主线程
     esp32tcpcom.start()
-    # 保持主线程活跃
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
-        esp32tcpcom.stop()
-        print("程序中断")
-    finally:
-        esp32tcpcom.stop()
+    print("服务运行中，按 Ctrl+C 停止")
+    
+    # 最简化的保持主线程方式
+    signal.pause()  # 挂起主线程直到收到信号
