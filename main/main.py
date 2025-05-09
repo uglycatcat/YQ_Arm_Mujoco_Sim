@@ -20,6 +20,8 @@ from SolveIK import solveik
 from Controller import controller
 # 引入轨迹控制的相关函数
 from Trajectory import trajectory
+# 引入TCP通信
+from Esp32Tcp import esp32tcpcom
 
 class RobotArmController:
     
@@ -43,6 +45,8 @@ class RobotArmController:
         controller.start()
         # 启动串口通信协议线程
         protocol.start()
+        # 启动TCP通信线程
+        esp32tcpcom.start()
         
     def disable_mujoco_keys(self,window, key, scancode, action, mods):
     # 这里不执行任何操作，从而屏蔽默认快捷键
@@ -195,6 +199,8 @@ class RobotArmController:
         controller.stop()
         # 程序结束时关闭串口
         protocol.stop()
+        # 启动TCP通信线程
+        esp32tcpcom.stop()
         # 程序结束时关闭窗口
         if self.viewer:
             self.viewer.close()

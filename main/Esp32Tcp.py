@@ -3,6 +3,7 @@ import signal
 import sys
 import socket
 import threading
+import re
 import time
 from threading import Event
 
@@ -88,9 +89,27 @@ class Esp32Communication():
             decoded_data = data.decode('utf-8').strip()
             print(f"[TCP数据] 收到消息: {decoded_data}")
             
-            # 这里可以添加业务逻辑，例如：
-            # if decoded_data == "get_status":
-            #     self.send_response("status:ok")
+            # 处理数据
+            last_data=decoded_data[-1]
+            if "add" in decoded_data:
+                self.sampling_point(last_data)
+            if "del" in decoded_data:
+                self.delete_point(last_data)
+            if "but3" in decoded_data:
+                self.motion_trigger(last_data)
+            if "but4" in decoded_data:
+                self.video_record(last_data)
+            if "JS1" in decoded_data:
+                if "CENTER" in decoded_data:
+                    self.set_joystick_js1(0, 0)
+                elif match := re.search(r"X=(\d{1,2}) Y=(\d{1,2})", decoded_data):
+                    self.set_joystick_js1(*map(int, match.groups()))
+            if "JS2" in decoded_data:
+                if "CENTER" in decoded_data:
+                    self.set_joystick_js2(0, 0)
+                elif match := re.search(r"X=(\d{1,2}) Y=(\d{1,2})", decoded_data):
+                    self.set_joystick_js2(*map(int, match.groups()))
+                
         except UnicodeDecodeError:
             print(f"[TCP数据] 收到原始字节: {data.hex()}")
 
@@ -109,6 +128,30 @@ class Esp32Communication():
         self.stop()
         time.sleep(0.5)  # 等待资源释放
         print("[TCP服务端] 资源已清理")
+    
+    def sampling_point(self,data):
+        print(data)
+        return
+    
+    def delete_point(self,data):
+        print(data)
+        return
+    
+    def motion_trigger(self,data):
+        print(data)
+        return
+    
+    def video_record(self,data):
+        print(data)
+        return
+    
+    def set_joystick_js1(self,x,y):
+        print(x,y)
+        return
+    
+    def set_joystick_js2(self,x,y):
+        print(x,y)
+        return
 
 # 全局实例化
 esp32tcpcom = Esp32Communication()
