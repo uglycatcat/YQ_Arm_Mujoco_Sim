@@ -65,4 +65,33 @@ class SolveIKMethod:
         # 返回弧度制的计算结果
         return target_theta
     
+    # def numerical_solution(self,target_pos，target_rot):
+    #     """逆运动学求解，数值方法，此函数未做适配，可以参考history文件夹中的main_v1"""
+    #     def objective(q):
+    #         # 仅更新可控关节
+    #         for i, joint_idx in enumerate(self.control_list):
+    #             self.data.qpos[joint_idx] = q[i]
+            
+    #         self.data.qpos[2] = self.data.qpos[3] = self.data.qpos[1]  # joint3 = joint2_2
+    #         self.data.qpos[5] = self.data.qpos[4]  # 根据实际机械结构调整
+    #         self.data.qpos[6] = -self.data.qpos[5]
+    #         mj.mj_forward(self.model, self.data)
+            
+    #         # 计算误差
+    #         pos_err = np.linalg.norm(self.data.xpos[self.end_effector_id] - target_pos)
+    #         orient_err = np.linalg.norm(self.data.xmat[self.end_effector_id].reshape(3, 3) - target_rot.as_matrix(), ord='fro') / 3
+    #         return pos_err + 0.5 * orient_err  # 调整权重平衡
+        
+    #     # 关节角度约束
+    #     constraints = [
+    #         {"type": "ineq", "fun": lambda q, i=i: q[i] - self.model.jnt_range[self.control_list[i], 0]} for i in range(len(self.control_list))
+    #     ] + [
+    #         {"type": "ineq", "fun": lambda q, i=i: self.model.jnt_range[self.control_list[i], 1] - q[i]} for i in range(len(self.control_list))
+    #     ]
+        
+    #     # 初始值
+    #     q_init = [self.data.qpos[i] for i in self.control_list]
+    #     res = minimize(objective, q_init, method='SLSQP', constraints=constraints)
+    #     return res
+    
 solveik = SolveIKMethod()

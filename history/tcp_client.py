@@ -1,4 +1,5 @@
 # client.py
+# 在ubuntu上启动服务器后，可以通过此文件进行简单测试
 import socket
 import sys
 
