@@ -8,13 +8,15 @@ from scipy.interpolate import make_interp_spline # 用于计算样条曲线
 class ArmMotionTrajectory:
     
     def __init__(self):
-        # 在protocol文件中，进行电机编码器采样的结果以n行3列的矩阵形式存储在这里
+        # 在protocol文件中，进行电机编码器采样的结果以n行3列的矩阵形式存储在这里 目前不使用
         self.sampling_encoder_buffer=np.empty((0, 3), dtype=np.float32)
-        # 测试用变量，目标控制点三维坐标以n行3列的矩阵形式存储在这里
+        # 测试用变量组
+        self.sampling_test_buffer=np.empty((0, 3), dtype=np.float32)
+        # 在main文件中，采样时进行采样的目标点存放在此处。目标控制点三维坐标以n行3列的矩阵形式存储在这里
         self.sampling_mjc_pos_buffer=np.empty((0, 3), dtype=np.float32)
         # 填充测试用数据，一共六个控制点，坐标单位为m
-        self.sampling_mjc_pos_buffer = np.vstack((
-            self.sampling_mjc_pos_buffer,
+        self.sampling_test_buffer = np.vstack((
+            self.sampling_test_buffer,
             np.array([-0.32774725, -0.51468068, 0.43656295], dtype=np.float32).reshape(1, -1),
             np.array([-0.33578701, -0.36444909, 0.4445864], dtype=np.float32).reshape(1, -1),
             np.array([-0.49604285, -0.09849478, 0.44389422], dtype=np.float32).reshape(1, -1),
@@ -25,6 +27,10 @@ class ArmMotionTrajectory:
         
     def linear_interpolation(self):
         """基于五次多项式的轨迹规划，控制起止速度/加速度为0，并按等时间间隔进行插补"""
+        # 边界条件控制
+        if len(self.sampling_mjc_pos_buffer)<2:
+            print("直线插值至少需要两个点")
+            return
         # 参数定义
         v_max = 0.12      # 最大速度 (m/s)
         a_max = 0.15      # 最大加速度 (m/s^2)

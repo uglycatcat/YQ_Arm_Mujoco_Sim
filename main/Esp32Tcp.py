@@ -6,7 +6,7 @@ import threading
 import re
 import time
 from threading import Event
-
+from Controller import controller
 class Esp32Communication():
     def __init__(self):
         """构造函数"""
@@ -130,26 +130,33 @@ class Esp32Communication():
         print("[TCP服务端] 资源已清理")
     
     def sampling_point(self,data):
-        print(data)
+        """采样函数，根据传入的data确定此刻采样的标记点的序号（0~7）"""
+        controller.command=2
+        print(f"申请内部采样: {data}")
         return
     
     def delete_point(self,data):
+        """删除采样点，位置由data确定（0~7），data为8表示删除所有已有采样点"""
         print(data)
         return
     
     def motion_trigger(self,data):
+        """data==2表示短按触发记录后点位运动，1表示长按按下瞬间，0表示长按松开瞬间"""
         print(data)
         return
     
     def video_record(self,data):
+        """当前还没有的录像开启和关闭（data在0/1切换）功能"""
         print(data)
         return
     
     def set_joystick_js1(self,x,y):
+        """左摇杆XY值，值域为0-50"""
         print(x,y)
         return
     
     def set_joystick_js2(self,x,y):
+        """右摇杆XY值，值域为0-50"""
         print(x,y)
         return
 

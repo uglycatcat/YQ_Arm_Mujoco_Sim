@@ -182,17 +182,17 @@ class ArmController:
         else:
             self._key_state['x'] = False
 
-        # c 键：在模式15下执行外部采样命令
+        # c 键：在模式13下执行外部采样命令
         if keyboard.is_pressed('c'):
-            if not self._key_state['c'] and self.control_mode == 15:
+            if not self._key_state['c'] and self.control_mode == 13:
                 self.sampling_command(1)
                 self._key_state['c'] = True
         else:
             self._key_state['c'] = False
         
-        # c 键：在模式15下执行内部采样命令
+        # c 键：在模式13下执行内部采样命令
         if keyboard.is_pressed('v'):
-            if not self._key_state['v'] and self.control_mode == 15:
+            if not self._key_state['v'] and self.control_mode == 13:
                 self.sampling_command(2)
                 self._key_state['v'] = True
         else:

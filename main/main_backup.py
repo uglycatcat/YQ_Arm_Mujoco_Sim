@@ -1,10 +1,3 @@
-# 目的是优化其中的机械臂逆解算法
-# 本文件使用几何解逆解将得到的结果传给机械臂
-# 同时使用Xbox或者键盘接收信息
-# 通过串口协议将信息传递给下位机
-# 本文件是相对于main.py的几何解优化版本
-# 计算复杂度由O（n*k）降低为O（1）
-# sudo /home/sunrise/miniconda3/envs/mujoco_env/bin/python main/main.py
 import numpy as np
 import mujoco as mj
 import mujoco_viewer
@@ -12,16 +5,9 @@ import glfw
 import time
 import math
 from pathlib import Path
-# 引入自定义串口协议
-from Protocol import protocol
-# 引入逆解相关运算
 from SolveIK import solveik
-# 引入控制器和控制模式
 from Controller import controller
-# 引入轨迹控制的相关函数
-from Trajectory import trajectory
-# 引入TCP通信
-from Esp32Tcp import esp32tcpcom
+from DebugGUI import debuggui
 
 class RobotArmController:
     
@@ -39,14 +25,9 @@ class RobotArmController:
         # 初始化观察器
         self.viewer = mujoco_viewer.MujocoViewer(self.model, self.data, width=1200, height=800)
         glfw.set_key_callback(self.viewer.window, self.disable_mujoco_keys)
-        # 打印帮助信息，显示控制器的使用说明
-        controller.help()
-        # 启动控制器线程
+        
         controller.start()
-        # 启动串口通信协议线程
-        protocol.start()
-        # 启动TCP通信线程
-        esp32tcpcom.start()
+        debuggui.start()
         
     def disable_mujoco_keys(self,window, key, scancode, action, mods):
     # 这里不执行任何操作，从而屏蔽默认快捷键
@@ -87,95 +68,30 @@ class RobotArmController:
         # 执行前向动力学计算
         mj.mj_forward(self.model, self.data)
         mj.mj_step(self.model, self.data)
-        return geometry_solution
-    
-    def sampling_command(self):
-        if not hasattr(self, 'sampling_times'):
-            self.sampling_times = 0
-        
-        raw_value = self.data.xpos[self.end_effector_id].copy()  # 直接取末端执行器的位置
-        new_row = raw_value.astype(np.float32).reshape(1, -1)  # 确保 float32
-        
-        # 转成 numpy 行向量并拼接
-        trajectory.sampling_mjc_pos_buffer = np.vstack((trajectory.sampling_mjc_pos_buffer, new_row))
-        
-        self.sampling_times += 1
-        print(f"内部采样成功: {raw_value},{self.sampling_times}")        
+        return geometry_solution        
         
     def run(self):
         """主循环"""
         # 记录程序运行时间
         last_update = time.time()
         last_print_time = time.time()
-        # 初始化当前控制模式
-        current_control_mode = controller.update_mode()
         # 进入程序主循环
         while self.viewer.is_alive if self.viewer else True:
-            
-            # 用于轨迹补点
-            i=0
+
             # 输出控制循环耗时起点
             loop_start_time = time.time()
             
             # 处理控制器线程的交互,得到当前控制器的输入
             trans = controller.update_data()
             
-            # 处理控制器线程的交互,处理当前是否有特殊命令（比如打点采样）
-            if controller.command==1: 
-                protocol.sampling_command()
-                controller.command=0;
-            if controller.command==2: 
-                self.sampling_command()
-                controller.command=0;
-                
-            # 处理控制器线程的交互,处理当前是否发生了控制模式的变化
-            if current_control_mode != controller.update_mode(): 
-                current_control_mode=controller.update_mode()
-                protocol.change_mode(current_control_mode)    
+            """前三轴逆解控制模式"""
+            # 获取当前末端执行器的位置
+            current_pos = self.data.xpos[self.end_effector_id].copy()
             
-            # 根据控制模式判断当前任务
-            if current_control_mode==13:
-                """前三轴逆解控制模式"""
-                # 获取当前末端执行器的位置
-                current_pos = self.data.xpos[self.end_effector_id].copy()
-                
-                # 仅在有输入的情况下进行逆解
-                if np.any(np.abs(trans) > 1e-5):
-                    current_pos += trans
-                    self.solve_ik(current_pos)
-
-                # 更新关节角度到串口协议
-                protocol.update_angles([self.data.qpos[i] for i in self.control_list])
-            else:
-                """轨迹控制模式"""
-                # 计算轨迹
-                Trajectory1=trajectory.linear_interpolation()
-                Trajectory2=trajectory.smooth_global_interpolation()
-                print("插补点数:", Trajectory1.shape[0])
-                
-                while(i<Trajectory1.shape[0]):
-                    # 取出当前插补点的关节角
-                    theta_1, theta_2, theta_3 = Trajectory1[i]
-                    # 更新前三个关节（0,1,4）
-                    self.data.qpos[0] = theta_1
-                    self.data.qpos[1] = theta_2
-                    self.data.qpos[4] = theta_3
-                    self.data.qpos[2] = self.data.qpos[1]
-                    self.data.qpos[3] = self.data.qpos[1]
-                    self.data.qpos[5] = self.data.qpos[4]  # 根据实际机械结构调整
-                    self.data.qpos[6] = -self.data.qpos[5]
-                    # 保持最后三个关节为0
-                    self.data.qpos[7] = 0
-                    self.data.qpos[8] = 0
-                    self.data.qpos[9] = 0
-                    # 执行前向动力学计算
-                    mj.mj_forward(self.model, self.data)
-                    mj.mj_step(self.model, self.data)
-                    # 短暂延时
-                    time.sleep(0.02)
-                    self.viewer.render()
-                    # 移动序号
-                    i+=1
+            # 仅在有输入的情况下进行逆解
+            if np.any(np.abs(trans) > 1e-5):
+                current_pos += trans
+                self.solve_ik(current_pos)
                 
             # 控制渲染更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
@@ -197,10 +113,7 @@ class RobotArmController:
         
         # 程序结束时关闭控制器线程
         controller.stop()
-        # 程序结束时关闭串口
-        protocol.stop()
-        # 启动TCP通信线程
-        esp32tcpcom.stop()
+        debuggui.stop()
         # 程序结束时关闭窗口
         if self.viewer:
             self.viewer.close()
