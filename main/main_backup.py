@@ -1,3 +1,4 @@
+# 测试性质文件，随时可以删除
 import numpy as np
 import mujoco as mj
 import mujoco_viewer
