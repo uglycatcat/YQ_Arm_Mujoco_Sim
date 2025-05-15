@@ -109,6 +109,10 @@ class RobotArmController:
         last_print_time = time.time()
         # 初始化当前控制模式
         current_control_mode = controller.update_mode()
+        # 用来判断是否是第一次循环
+        initial_pos = False
+        # 记录上一次的目标位置
+        last_target_pos = None  # 初始化为None更安全
         # 进入程序主循环
         while self.viewer.is_alive if self.viewer else True:
             
@@ -136,12 +140,18 @@ class RobotArmController:
             # 根据控制模式判断当前任务
             if current_control_mode==13:
                 """前三轴逆解控制模式"""
-                # 获取当前末端执行器的位置
-                current_pos = self.data.xpos[self.end_effector_id].copy()
+                # 仅在循环第一次时获取末端执行器的位置
+                if not initial_pos:
+                    current_pos = self.data.xpos[self.end_effector_id].copy()
+                    initial_pos = True
+                    last_target_pos = current_pos.copy()  # 初始化last_target_pos
+                else:
+                    current_pos = last_target_pos.copy() if last_target_pos is not None else None
                 
                 # 仅在有输入的情况下进行逆解
-                if np.any(np.abs(trans) > 1e-5):
+                if np.any(np.abs(trans) > 1e-5) and current_pos is not None:
                     current_pos += trans
+                    last_target_pos = current_pos.copy()
                     self.solve_ik(current_pos)
 
                 # 更新关节角度到串口协议

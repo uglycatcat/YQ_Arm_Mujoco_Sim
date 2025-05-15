@@ -6,6 +6,8 @@ import glfw
 import time
 import math
 from pathlib import Path
+from scipy.optimize import minimize
+from scipy.spatial.transform import Rotation as R
 from SolveIK import solveik
 from Controller import controller
 from DebugGUI import debuggui
@@ -46,6 +48,39 @@ class RobotArmController:
         # 如果秩不足6，说明处于奇异点
         return rank < 6
     
+    def numerical_solve_ik(self, target_pos, target_rot):
+        """逆运动学求解"""
+        if self.check_singularity():
+            print("警告：奇异点检测，放弃此次 IK 计算！")
+            return None
+
+        def objective(q):
+            # 仅更新可控关节
+            for i, joint_idx in enumerate(self.control_list):
+                self.data.qpos[joint_idx] = q[i]
+            
+            self.data.qpos[2] = self.data.qpos[3] = self.data.qpos[1]  # joint3 = joint2_2
+            self.data.qpos[5] = self.data.qpos[4]  # 根据实际机械结构调整
+            self.data.qpos[6] = -self.data.qpos[5]
+            mj.mj_forward(self.model, self.data)
+            
+            # 计算误差
+            pos_err = np.linalg.norm(self.data.xpos[self.end_effector_id] - target_pos)
+            orient_err = np.linalg.norm(self.data.xmat[self.end_effector_id].reshape(3, 3) - target_rot.as_matrix(), ord='fro') / 3
+            return pos_err + 0.5 * orient_err  # 调整权重平衡
+        
+        # 关节角度约束
+        constraints = [
+            {"type": "ineq", "fun": lambda q, i=i: q[i] - self.model.jnt_range[self.control_list[i], 0]} for i in range(len(self.control_list))
+        ] + [
+            {"type": "ineq", "fun": lambda q, i=i: self.model.jnt_range[self.control_list[i], 1] - q[i]} for i in range(len(self.control_list))
+        ]
+        
+        # 初始值
+        q_init = [self.data.qpos[i] for i in self.control_list]
+        res = minimize(objective, q_init, method='SLSQP', constraints=constraints)
+        return res
+    
     def solve_ik(self, target_pos):
         """逆运动学求解"""
         if self.check_singularity():
@@ -75,43 +110,34 @@ class RobotArmController:
         """主循环"""
         # 记录程序运行时间
         last_update = time.time()
-        last_print_time = time.time()
+        initial_pos = False  # 改为布尔值更符合语义
+        last_target_pos = None  # 初始化为None更安全
         # 进入程序主循环
         while self.viewer.is_alive if self.viewer else True:
-
-            # 输出控制循环耗时起点
-            loop_start_time = time.time()
             
             # 处理控制器线程的交互,得到当前控制器的输入
             trans = controller.update_data()
-            
-            """前三轴逆解控制模式"""
-            # 获取当前末端执行器的位置
-            current_pos = self.data.xpos[self.end_effector_id].copy()
-            
-            # 仅在有输入的情况下进行逆解
-            if np.any(np.abs(trans) > 1e-5):
-                current_pos += trans
-                self.solve_ik(current_pos)
+            # 仅在循环第一次时获取末端执行器的位置
+            if not initial_pos:
+                current_pos = self.data.xpos[self.end_effector_id].copy()
+                initial_pos = True
+                last_target_pos = current_pos.copy()  # 初始化last_target_pos
+            else:
+                current_pos = last_target_pos.copy() if last_target_pos is not None else None
                 
+            # 仅在有输入的情况下进行逆解
+            if np.any(np.abs(trans) > 1e-5) and current_pos is not None:
+                current_pos += trans
+                last_target_pos = current_pos.copy()
+                self.solve_ik(current_pos)
+            
             # 控制渲染更新频率
             if (time.time() - last_update) > 0.02:  # 50Hz
                 self.viewer.render()
                 last_update = time.time()
-
-            # 输出控制循环耗时
-            loop_interval = time.time()-loop_start_time
             
-            # 打印解偏差
-            if (time.time() - last_print_time) > 5:
-                qpos_0 = f"{math.degrees(self.data.qpos[0]):.6f}"
-                qpos_1 = f"{math.degrees(self.data.qpos[1]):.6f}"
-                qpos_4 = f"{math.degrees(self.data.qpos[4]):.6f}"
-                print(f"当前位置：{current_pos}")
-                print(f"仿真角度：[{qpos_0}, {qpos_1}, {qpos_4}]")
-                print(f"控制循环耗时: {(loop_interval) * 1000:.4f}ms")
-                last_print_time = time.time()
-        
+            debuggui.receive_data(np.concatenate([current_pos, self.data.xpos[self.end_effector_id], current_pos-self.data.xpos[self.end_effector_id]]))
+            
         # 程序结束时关闭控制器线程
         controller.stop()
         debuggui.stop()

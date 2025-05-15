@@ -7,17 +7,18 @@ class ControllerDebugGUI:
     
     def __init__(self):
         """实例初始化"""
-        self.width = 800
-        self.height = 600
+        self.width = 400
+        self.height = 800
         self.control_motor_dict = {
-            "Left_Hip_Roll": 0,
-            "Left_Hip_Pitch": 0,
-            "Left_Knee_Pitch": 0,
-            "Left_Ankle_Wheel": 0,
-            "Right_Hip_Roll": 0,
-            "Right_Hip_Pitch": 0,
-            "Right_Knee_Pitch": 0,
-            "Right_Ankle_Wheel": 0,
+            "target-x": 0,
+            "target-y": 0,
+            "target-z": 0,
+            "actual-x": 0,
+            "actual-y": 0,
+            "actual-z": 0,
+            "differ-x": 0,
+            "differ-y": 0,
+            "differ-z": 0,
         }
         self.running = threading.Event()
         self.thread = None
@@ -45,7 +46,7 @@ class ControllerDebugGUI:
         # 绘制每个关节的数据
         y_pos = 80
         for joint, value in self.control_motor_dict.items():
-            text = self.font.render(f"{joint}: {value:.2f}", True, (0, 0, 0))
+            text = self.font.render(f"{joint}: {value:.10f}", True, (0, 0, 0))
             self.screen.blit(text, (50, y_pos))
             y_pos += 40
             
@@ -94,13 +95,13 @@ class ControllerDebugGUI:
         
     def receive_data(self, control_data):
         """获取机器人的控制数据数组"""
-        if len(control_data) != 8: 
-            print("传入GUI的关节数组长度不正确")
+        if len(control_data) != 9: 
+            print("传入GUI的数组长度不正确")
             return
             
         # 如果数据格式正常，将control_data按顺序传入字典
         keys = list(self.control_motor_dict.keys())
-        for i in range(8):
+        for i in range(9):
             self.control_motor_dict[keys[i]] = control_data[i]
             
     def __del__(self):
