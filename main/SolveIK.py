@@ -60,7 +60,7 @@ class SolveIKMethod:
         theta_2 = temp1+theta_2-math.radians(120)
         theta_3 = (math.pi/2-(math.pi-theta_2-math.radians(120))+theta_3)-math.radians(70)
         
-        target_theta=[theta_1+0.00005, -theta_2, theta_3]
+        target_theta=[theta_1, -theta_2, theta_3]
         
         # 返回弧度制的计算结果
         return target_theta
